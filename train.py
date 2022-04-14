@@ -21,21 +21,8 @@ import wandb
 import random
 import numpy as np
 from functools import reduce, partial
-from utils import increment_path
 
-
-def set_seeds(random_seed):
-    # for reproducibility
-    os.environ['PYTHONHASHSEED'] = str(random_seed)
-    random.seed(random_seed)
-    np.random.seed(random_seed)
-    np.random.default_rng(random_seed)
-
-    torch.manual_seed(random_seed)
-    torch.cuda.manual_seed(random_seed)
-    torch.cuda.manual_seed_all(random_seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
+from utils import increment_path, set_seeds, update_args, get_sweep_cfg
 
 
 def parse_args():
@@ -156,15 +143,6 @@ def do_training(
         })
 
 
-def update_args(args, wandb_cfg):
-    # wandb_cfg changes with every experiment
-    # so, it must be updated to args
-    sweep_cfg = get_sweep_cfg(args)
-    for key in sweep_cfg['parameters'].keys():
-        vars(args)[f"{key}"] = wandb_cfg[f"{key}"]
-    return args
-
-
 def main(args):
     # generate work directory every experiment
     args.work_dir_exp = increment_path(osp.join(args.work_dir, 'exp'))
@@ -192,30 +170,11 @@ def main(args):
     with open(yamldir, 'w') as f: yaml.dump(args.__dict__, f, indent=4)
 
 
-def get_sweep_cfg(args):
-    sweep_cfg = dict(
-        name=args.sweep_name,   # sweep name
-        method='grid',          # Others : 'bayes', 'random'
-        metric=dict(
-            name='valid/loss',  # anything you are logging on wandb
-            goal='minimize'
-        ),
-        parameters=dict(        # if you want to add new parameter, add here
-            image_size={'values': [1024]},
-            input_size={'values': [512]},
-            batch_size={'values': [16]},
-            learning_rate={'values': [1e-3, 1e-4]},
-            max_epoch={'values': [2]},
-        )
-    )
-    return sweep_cfg
-
-
 if __name__ == '__main__':
     args = parse_args()
     if args.sweep:
         sweep_cfg = get_sweep_cfg(args)
-
+        
         # you must to change project name
         sweep_id = wandb.sweep(sweep=sweep_cfg, entity='mg_generation', project='data_annotation_dongwoo')
         # sweep_cnt : multiplied value the number of all sweep cases
