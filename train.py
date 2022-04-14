@@ -15,6 +15,25 @@ from east_dataset import EASTDataset
 from dataset import SceneTextDataset
 from model import EAST
 
+import gc
+import wandb
+import random
+import numpy as np
+from utils import increment_path
+
+
+def set_seeds(random_seed):
+    os.environ['PYTHONHASHSEED'] = str(random_seed)
+    random.seed(random_seed)
+    np.random.seed(random_seed)
+    np.random.default_rng(random_seed)
+
+    torch.manual_seed(random_seed)
+    torch.cuda.manual_seed(random_seed)
+    torch.cuda.manual_seed_all(random_seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
 
 def parse_args():
     parser = ArgumentParser()
@@ -22,8 +41,8 @@ def parse_args():
     # Conventional args
     parser.add_argument('--data_dir', type=str,
                         default=os.environ.get('SM_CHANNEL_TRAIN', '../input/data/ICDAR17_Korean'))
-    parser.add_argument('--model_dir', type=str, default=os.environ.get('SM_MODEL_DIR',
-                                                                        'trained_models'))
+    # parser.add_argument('--model_dir', type=str,
+    #                     default=os.environ.get('SM_MODEL_DIR', 'trained_models'))
 
     parser.add_argument('--device', default='cuda' if cuda.is_available() else 'cpu')
     parser.add_argument('--num_workers', type=int, default=4)
@@ -35,16 +54,25 @@ def parse_args():
     parser.add_argument('--max_epoch', type=int, default=200)
     parser.add_argument('--save_interval', type=int, default=5)
 
+    # Update
+    parser.add_argument('--seed', type=int, default=42, help='random seed')
+    parser.add_argument('--workdir', default='./work_dirs',
+                        help='the root dir to save logs and models about each experiment')
+
     args = parser.parse_args()
 
-    if args.input_size % 32 != 0:
-        raise ValueError('`input_size` must be a multiple of 32')
+    if args.input_size % 32 != 0: raise ValueError('`input_size` must be a multiple of 32')
 
     return args
 
 
-def do_training(data_dir, model_dir, device, image_size, input_size, num_workers, batch_size,
-                learning_rate, max_epoch, save_interval):
+def do_training(data_dir, device, image_size, input_size, num_workers, batch_size,
+                learning_rate, max_epoch, save_interval,
+                seed, workdir):
+    gc.collect()
+    torch.cuda.empty_cache()
+    set_seeds(seed)
+    
     dataset = SceneTextDataset(data_dir, split='train', image_size=image_size, crop_size=input_size)
     dataset = EASTDataset(dataset)
     num_batches = math.ceil(len(dataset) / batch_size)
@@ -58,7 +86,7 @@ def do_training(data_dir, model_dir, device, image_size, input_size, num_workers
 
     model.train()
     for epoch in range(max_epoch):
-        epoch_loss, epoch_start = 0, time.time()
+        epoch_loss, epoch_cls_loss, epoch_ang_loss, epoch_iou_loss = 0, 0, 0, 0
         with tqdm(total=num_batches) as pbar:
             for img, gt_score_map, gt_geo_map, roi_mask in train_loader:
                 pbar.set_description('[Epoch {}]'.format(epoch + 1))
@@ -70,28 +98,37 @@ def do_training(data_dir, model_dir, device, image_size, input_size, num_workers
 
                 loss_val = loss.item()
                 epoch_loss += loss_val
+                epoch_cls_loss += extra_info['cls_loss']
+                epoch_ang_loss += extra_info['angle_loss']
+                epoch_iou_loss += extra_info['iou_loss']
 
                 pbar.update(1)
-                val_dict = {
-                    'Cls loss': extra_info['cls_loss'], 'Angle loss': extra_info['angle_loss'],
-                    'IoU loss': extra_info['iou_loss']
-                }
-                pbar.set_postfix(val_dict)
+                pbar.set_postfix({
+                    'loss': loss_val, 'cls loss': extra_info['cls_loss'],
+                    'ang loss': extra_info['angle_loss'], 'IoU loss': extra_info['iou_loss']
+                })
 
         scheduler.step()
 
-        print('Mean loss: {:.4f} | Elapsed time: {}'.format(
-            epoch_loss / num_batches, timedelta(seconds=time.time() - epoch_start)))
-
         if (epoch + 1) % save_interval == 0:
-            if not osp.exists(model_dir):
-                os.makedirs(model_dir)
-
-            ckpt_fpath = osp.join(model_dir, 'latest.pth')
+            ckpt_fpath = osp.join(workdir, 'latest.pth')
             torch.save(model.state_dict(), ckpt_fpath)
+
+        wandb.log({
+            "loss": epoch_loss/num_batches, "cls Loss": epoch_cls_loss/num_batches,
+            "ang Loss": epoch_ang_loss/num_batches, "IoU Loss": epoch_iou_loss/num_batches
+        })
 
 
 def main(args):
+    args.workdir = increment_path(osp.join(args.workdir, 'exp'))
+    if not osp.exists(args.workdir): os.makedirs(args.workdir)
+    
+    wandb.init(
+        entity='mg_generation', project='data_annotation_dongwoo', config=vars(args),
+        group=None, tags=[], name=args.workdir.split('/')[-1]
+    )
+    
     do_training(**args.__dict__)
 
 
