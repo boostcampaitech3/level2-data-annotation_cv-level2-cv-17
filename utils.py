@@ -42,29 +42,29 @@ def set_seeds(random_seed):
     torch.backends.cudnn.benchmark = False
 
 
-def update_args(args, wandb_cfg):
-    # wandb_cfg changes with every experiment
-    # so, it must be updated to args
-    sweep_cfg = get_sweep_cfg(args)
-    for key in sweep_cfg['parameters'].keys():
-        vars(args)[f"{key}"] = wandb_cfg[f"{key}"]
-    return args
+# def update_args(args, wandb_cfg):
+#     # wandb_cfg changes with every experiment
+#     # so, it must be updated to args
+#     sweep_cfg = get_sweep_cfg(args)
+#     for key in sweep_cfg['parameters'].keys():
+#         vars(args)[f"{key}"] = wandb_cfg[f"{key}"]
+#     return args
 
 
-def get_sweep_cfg(args):
-    sweep_cfg = dict(
-        name=args.sweep_name,   # sweep name
-        method='grid',          # Others : 'bayes', 'random'
-        metric=dict(
-            name='valid/loss',  # anything you are logging on wandb
-            goal='minimize'
-        ),
-        parameters=dict(        # if you want to add new parameter, add here
-            image_size={'values': [1024]},
-            input_size={'values': [512]},
-            batch_size={'values': [16]},
-            learning_rate={'values': [1e-3, 1e-4]},
-            max_epoch={'values': [2]},
-        )
-    )
-    return sweep_cfg
+# def get_sweep_cfg(args):
+#     sweep_cfg = dict(
+#         name=args.sweep_name,   # sweep name
+#         method='grid',          # Others : 'bayes', 'random'
+#         metric=dict(
+#             name='valid/loss',  # anything you are logging on wandb
+#             goal='minimize'
+#         ),
+#         parameters=dict(        # if you want to add new parameter, add here
+#             image_size={'values': [1024]},
+#             input_size={'values': [512]},
+#             batch_size={'values': [16]},
+#             learning_rate={'values': [1e-3, 1e-4]},
+#             max_epoch={'values': [2]},
+#         )
+#     )
+#     return sweep_cfg

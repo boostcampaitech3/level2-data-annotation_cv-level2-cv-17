@@ -20,7 +20,8 @@ import yaml
 import wandb
 from functools import reduce, partial
 
-from utils import increment_path, set_seeds, update_args, get_sweep_cfg
+from sweep import update_args, get_sweep_cfg
+from utils import increment_path, set_seeds
 
 
 def parse_args():
