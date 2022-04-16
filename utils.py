@@ -50,4 +50,4 @@ def json_normalize(input_json_path = "../input/data/ICDAR17_Korean/ufo/train.jso
             image['words'][polygon]['points'] = list(map(lambda x: tuple(x),image['words'][polygon]['points']))
 
     with open(output_json_path,'w') as f:
-        json.dump(data,f)
+        json.dump(data, f, indent=4)
