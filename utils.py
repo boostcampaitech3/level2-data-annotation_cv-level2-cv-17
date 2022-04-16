@@ -4,6 +4,10 @@ from pathlib import Path
 import re
 import json
 
+import random
+import numpy as np
+import torch
+
 
 def increment_path(path, exist_ok=False):
     """ Automatically increment path, i.e. runs/exp --> runs/exp0, runs/exp1 etc.
@@ -51,3 +55,16 @@ def json_normalize(input_json_path = "../input/data/ICDAR17_Korean/ufo/train.jso
 
     with open(output_json_path,'w') as f:
         json.dump(data, f, indent=4)
+
+def set_seeds(random_seed):
+    # for reproducibility
+    # os.environ['PYTHONHASHSEED'] = str(random_seed)
+    random.seed(random_seed)
+    np.random.seed(random_seed)
+    np.random.default_rng(random_seed)
+
+    torch.manual_seed(random_seed)
+    torch.cuda.manual_seed(random_seed)
+    torch.cuda.manual_seed_all(random_seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
