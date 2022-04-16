@@ -44,9 +44,8 @@ def parse_args():
     parser.add_argument('--batch_size', type=int, default=16)
     parser.add_argument('--learning_rate', type=float, default=1e-3)
     parser.add_argument('--max_epoch', type=int, default=200)
-    # sweep
+    # etc
     parser.add_argument('--sweep', type=bool, default=True, help='sweep option')
-    parser.add_argument('--sweep_name', type=str, default='sweep', help='sweep name')
 
     args = parser.parse_args()
     if args.input_size % 32 != 0: raise ValueError('`input_size` must be a multiple of 32')
@@ -57,7 +56,7 @@ def do_training(
     data_dir, val_data_dir, work_dir, work_dir_exp,
     device, seed, num_workers, save_interval,
     image_size, input_size, batch_size, learning_rate, max_epoch,
-    sweep, sweep_name
+    sweep
     ):
     set_seeds(seed)
     
@@ -70,7 +69,7 @@ def do_training(
     val_dataset = SceneTextDataset(val_data_dir, split='train_copy', image_size=image_size, crop_size=input_size)
     val_dataset = EASTDataset(val_dataset)
     val_num_batches = math.ceil(len(val_dataset) / batch_size)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     model = EAST()
@@ -80,8 +79,6 @@ def do_training(
     
     for epoch in range(max_epoch):
         # train
-        gc.collect()
-        torch.cuda.empty_cache()
         model.train()
         epoch_loss, epoch_cls_loss, epoch_ang_loss, epoch_iou_loss = 0, 0, 0, 0
         with tqdm(total=num_batches) as pbar:
@@ -89,6 +86,7 @@ def do_training(
                 pbar.set_description('[Epoch {} Train]'.format(epoch + 1))
 
                 loss, extra_info = model.train_step(img, gt_score_map, gt_geo_map, roi_mask)
+                
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
@@ -99,22 +97,21 @@ def do_training(
                 epoch_ang_loss += extra_info['angle_loss']
                 epoch_iou_loss += extra_info['iou_loss']
                 
-                # set_postfix is about just one batch
                 pbar.update(1)
-                pbar.set_postfix({
-                    'loss': loss_value, 'cls_loss': extra_info['cls_loss'],
-                    'ang_loss': extra_info['angle_loss'], 'iou_loss': extra_info['iou_loss']
-                })
+            # now, set_postfix is about one epoch
+            pbar.set_postfix({
+                'loss': epoch_loss/num_batches, 'cls_loss': epoch_cls_loss/num_batches,
+                'ang_loss': epoch_ang_loss/num_batches, 'iou_loss': epoch_iou_loss/num_batches
+            })
         # valid
-        gc.collect()
-        torch.cuda.empty_cache()
         model.eval()
         val_epoch_loss, val_epoch_cls_loss, val_epoch_ang_loss, val_epoch_iou_loss = 0, 0, 0, 0
         with tqdm(total=val_num_batches) as pbar:
             for img, gt_score_map, gt_geo_map, roi_mask in val_loader:
                 pbar.set_description('[Epoch {} Valid]'.format(epoch + 1))
 
-                loss, extra_info = model.train_step(img, gt_score_map, gt_geo_map, roi_mask)
+                with torch.no_grad():
+                    loss, extra_info = model.train_step(img, gt_score_map, gt_geo_map, roi_mask)
 
                 loss_value = loss.item()
                 val_epoch_loss += loss_value
@@ -122,12 +119,12 @@ def do_training(
                 val_epoch_ang_loss += extra_info['angle_loss']
                 val_epoch_iou_loss += extra_info['iou_loss']
 
-                # set_postfix is about just one batch
                 pbar.update(1)
-                pbar.set_postfix({
-                    'loss': loss_value, 'cls_loss': extra_info['cls_loss'],
-                    'ang_loss': extra_info['angle_loss'], 'iou_loss': extra_info['iou_loss']
-                })
+            # now, set_postfix is about one epoch
+            pbar.set_postfix({
+                'loss': val_epoch_loss/val_num_batches, 'cls_loss': val_epoch_cls_loss/val_num_batches,
+                'ang_loss': val_epoch_ang_loss/val_num_batches, 'iou_loss': val_epoch_iou_loss/val_num_batches
+            })
 
         scheduler.step()
 
@@ -150,16 +147,19 @@ def main(args):
     if not osp.exists(args.work_dir_exp): os.makedirs(args.work_dir_exp)
     
     if args.sweep:
-        wandb_run = wandb.init(config=args.__dict__, reinit=True, tags=['tags'])
-        wandb_run.name = args.work_dir_exp.split('/')[-1] + '_' + args.sweep_name  # run name
+        # if you want to use tags, put tags=['something'] in wandb.init
+        wandb_run = wandb.init(config=args.__dict__, reinit=True)
+        wandb_run.name = args.work_dir_exp.split('/')[-1]  # run name
         args = update_args(args, wandb.config)
         do_training(**args.__dict__)
         wandb_run.finish()
     else:
         # you must to change project name
+        # if you want to use tags, put tags=['something'] in wandb.init
+        # if you want to use group, put group='something' in wandb.init
         wandb.init(
             entity='mg_generation', project='data_annotation_dongwoo',
-            group='group', tags=['tags'], name=args.work_dir_exp.split('/')[-1],
+            name=args.work_dir_exp.split('/')[-1],
             config=args.__dict__, reinit=True
         )
         do_training(**args.__dict__)
@@ -172,14 +172,9 @@ def main(args):
 if __name__ == '__main__':
     args = parse_args()
     if args.sweep:
-        sweep_cfg = get_sweep_cfg(args)
-        
+        sweep_cfg = get_sweep_cfg()
         # you must to change project name
         sweep_id = wandb.sweep(sweep=sweep_cfg, entity='mg_generation', project='data_annotation_dongwoo')
-        # sweep_cnt : multiplied value the number of all sweep cases
-        sweep_cnt_list = [len(v['values']) for k,v in sweep_cfg['parameters'].items()]
-        sweep_cnt = reduce(lambda x,y:x*y, sweep_cnt_list)
-
-        wandb.agent(sweep_id=sweep_id, function=partial(main, args), count=sweep_cnt)
+        wandb.agent(sweep_id=sweep_id, function=partial(main, args))
     else:
         main(args)
