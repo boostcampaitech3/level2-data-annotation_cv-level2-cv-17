@@ -13,34 +13,43 @@ def get_sweep_cfg():
         name='sweep',           # I recommend to change this everytime
         method='bayes',         # 'grid' or 'bayes' or 'random'
         metric=dict(
-            name='valid/loss',  # anything you are logging on wandb
+            name='valid_metric/hmean',  # anything you are logging on wandb
             goal='minimize'
         )
     )
+    # you can control logging parameter
+    # Ex. value : not log information on wandb sweep
+    #     values : log information on wandb sweep 
+    # optm : 'adam' | 'sgd'
+    # schd : 'multisteplr' | 'reducelr' | 'cosignlr'
     if sweep_cfg['method'] == 'grid':
         sweep_cfg['parameters'] = dict(
-            image_size=dict(value=1024),
-            input_size=dict(value=512),
-            batch_size=dict(values=[16, 32]),
+            image_size=dict(values=[1024]),
+            input_size=dict(values=[512]),
+            batch_size=dict(values=[32]),
             learning_rate=dict(values=[1e-4, 1e-3]),
-            max_epoch=dict(value=1),
+            max_epoch=dict(values=[100]),
+            optm=dict(values=['adam']),
+            schd=dict(values=['multisteplr'])
         )
     elif sweep_cfg['method'] == 'bayes':
-        # 'bayes' use distribution
         sweep_cfg['parameters'] = dict(
-            image_size=dict(distribution='constant', value=1024),
-            input_size=dict(distribution='constant', value=512),
-            batch_size=dict(distribution='categorical', values=[16, 32]),
+            image_size=dict(distribution='categorical', values=[1024]),
+            input_size=dict(distribution='categorical', values=[512]),
+            batch_size=dict(distribution='categorical', values=[32]),
             learning_rate=dict(distribution='uniform', min=1e-4, max=1e-3),
-            max_epoch=dict(distribution='constant', value=1),
+            max_epoch=dict(distribution='categorical', values=[100]),
+            optm=dict(distribution='categorical', values=['sgd']),
+            schd=dict(distribution='categorical', values=['cosignlr'])
         )
     elif sweep_cfg['method'] == 'random':
-        # 'random' use distribution & custom probabilities
         sweep_cfg['parameters'] = dict(
-            image_size=dict(distribution='constant', value=1024),
-            input_size=dict(distribution='constant', value=512),
-            batch_size=dict(distribution='categorical', values=[16, 32]),
+            image_size=dict(distribution='categorical', values=[1024]),
+            input_size=dict(distribution='categorical', values=[512]),
+            batch_size=dict(distribution='categorical', values=[32]),
             learning_rate=dict(distribution='uniform', min=1e-4, max=1e-3),
-            max_epoch=dict(values=[1, 2], probabilities=[0.7, 0.3]),
+            max_epoch=dict(distribution='categorical', values=[100]),
+            optm=dict(distribution='categorical', values=['adam']),
+            schd=dict(distribution='categorical', values=['reducelr'])
         )
     return sweep_cfg
