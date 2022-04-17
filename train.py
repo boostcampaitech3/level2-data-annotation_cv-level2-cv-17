@@ -28,20 +28,24 @@ from sweep import update_args, get_sweep_cfg
 from utils import increment_path, set_seeds, read_json
 from custom_scheduler import CosineAnnealingWarmUpRestarts
 
-from detect import detect
 from deteval import calc_deteval_metrics
 from inference import do_inference
+
+import warnings
+warnings.filterwarnings(action='ignore')
+# /opt/conda/lib/python3.8/site-packages/PIL/Image.py:975:
+# UserWarning: Palette images with Transparency expressed in bytes should be converted to RGBA images
 
 
 def parse_args():
     parser = ArgumentParser()
     # directory
     parser.add_argument('--data_dir', type=str,
-                        default=os.environ.get('SM_CHANNEL_TRAIN', '../input/data/ICDAR17_ALL'))
+                        default=os.environ.get('SM_CHANNEL_TRAIN', '../input/data/ICDAR17_Korean'))
     parser.add_argument('--val_data_dir', type=str,
                         default=os.environ.get('SM_CHANNEL_TRAIN', '../input/data/ICDAR17_Korean'))
     parser.add_argument('--json_dir', type=str,
-                        default='/opt/ml/input/data/ICDAR17_ALL/ufo/train.json', help='train json directory')
+                        default='/opt/ml/input/data/ICDAR17_Korean/ufo/train.json', help='train json directory')
     parser.add_argument('--val_json_dir', type=str,
                         default='/opt/ml/input/data/ICDAR17_Korean/ufo/train.json', help='valid json directory')
     parser.add_argument('--work_dir', type=str, default='./work_dirs',
