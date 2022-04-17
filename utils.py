@@ -82,9 +82,11 @@ def update_json(json_dir, extension):
     json_file = read_json(json_dir)
     
     # train.json save to train_origin.json
+    # only if train_origin.json is not already exists
     new_json_dir = json_dir[:-5] + '_origin.json'
-    with open(new_json_dir, 'w') as f:
-        json.dump(json_file, f, indent=4)
+    if not os.path.isfile(new_json_dir):
+        with open(new_json_dir, 'w') as f:
+            json.dump(json_file, f, indent=4)
 
     # pop extension file
     update_list = [i for i in json_file['images'].keys() if i.split('.')[-1]==extension]
