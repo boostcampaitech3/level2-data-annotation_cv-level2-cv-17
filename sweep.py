@@ -14,7 +14,7 @@ def get_sweep_cfg():
         method='bayes',         # 'grid' or 'bayes' or 'random'
         metric=dict(
             name='valid_metric/hmean',  # anything you are logging on wandb
-            goal='minimize'
+            goal='maximize'
         )
     )
     # you can control logging parameter
