@@ -1,4 +1,5 @@
 import os
+import os.path as osp
 import glob
 from pathlib import Path
 import re
@@ -68,3 +69,30 @@ def set_seeds(random_seed):
     torch.cuda.manual_seed_all(random_seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
+
+def delete_image(json_dir, image_dir, extension):
+    json_file = read_json(json_dir)
+    
+    # delete image with extension file
+    del_list = [i for i in json_file['images'].keys() if i.split('.')[-1]==extension]
+    for i in del_list:
+        os.remove(osp.join(image_dir, i))
+
+def update_json(json_dir, extension):
+    json_file = read_json(json_dir)
+    
+    # train.json save to train_origin.json
+    # only if train_origin.json is not already exists
+    new_json_dir = json_dir[:-5] + '_origin.json'
+    if not os.path.isfile(new_json_dir):
+        with open(new_json_dir, 'w') as f:
+            json.dump(json_file, f, indent=4)
+
+    # pop extension file
+    update_list = [i for i in json_file['images'].keys() if i.split('.')[-1]==extension]
+    for i in update_list:
+        json_file['images'].pop(i)
+    
+    # update train.json without extension file
+    with open(json_dir, 'w') as f:
+        json.dump(json_file, f, indent=4)
