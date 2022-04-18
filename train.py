@@ -4,7 +4,7 @@ from argparse import ArgumentParser
 
 import torch
 from torch import cuda
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, ConcatDataset
 from torch.optim import lr_scheduler
 
 import math
@@ -31,12 +31,19 @@ from custom_scheduler import CosineAnnealingWarmUpRestarts
 def parse_args():
     parser = ArgumentParser()
     # directory
-    parser.add_argument('--data_dir', type=str,
-                        default=os.environ.get('SM_CHANNEL_TRAIN', '../input/data/ICDAR17_ALL'))
+    # parser.add_argument('--data_dir', type=str,
+    #                     default=os.environ.get('SM_CHANNEL_TRAIN', '../input/data/ICDAR17_ALL'))
+
+    parser.add_argument('--data_dir', type=str, nargs='+', default=['/opt/ml/input/data/AIHUB', '/opt/ml/input/data/ICDAR17_train_cv'])
+
     parser.add_argument('--val_data_dir', type=str,
                         default=os.environ.get('SM_CHANNEL_TRAIN', '../input/data/ICDAR17_Korean'))
-    parser.add_argument('--json_dir', type=str,
-                        default='/opt/ml/input/data/ICDAR17_ALL/ufo/train.json', help='train json directory')
+    # parser.add_argument('--json_dir', type=str,
+    #                     default='/opt/ml/input/data/ICDAR17_ALL/ufo/train.json', help='train json directory')
+    parser.add_argument('--json_dir', type=str, nargs='+',
+                        default=['/opt/ml/input/data/AIHUB/ufo/valid.json', '/opt/ml/input/data/ICDAR17_train_cv/ufo/train.json'], help='train json directory')
+
+    
     parser.add_argument('--val_json_dir', type=str,
                         default='/opt/ml/input/data/ICDAR17_Korean/ufo/train.json', help='valid json directory')
     parser.add_argument('--work_dir', type=str, default='./work_dirs',
@@ -74,9 +81,14 @@ def do_training(
     set_seeds(seed)
     
     # you can control json_name by adjusting args.json_dir
-    json_name = json_dir.split('/')[-1].split('.')[0]
-    dataset = SceneTextDataset(data_dir, split=json_name, image_size=image_size, crop_size=input_size)
-    dataset = EASTDataset(dataset)
+    # json_name = json_dir.split('/')[-1].split('.')[0]
+    json_name = [i.split('/')[-1].split('.')[0] for i in json_dir]
+
+    # dataset = SceneTextDataset(data_dir, split=json_name, image_size=image_size, crop_size=input_size)
+    # dataset = EASTDataset(dataset)
+    dataset = [SceneTextDataset(i, split=json_name[ind], image_size=image_size, crop_size=input_size) for ind, i in enumerate(data_dir)]
+    dataset = EASTDataset(ConcatDataset(dataset))
+
     num_batches = math.ceil(len(dataset) / batch_size)
     train_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
     
