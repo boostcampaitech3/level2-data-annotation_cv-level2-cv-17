@@ -34,14 +34,14 @@ def parse_args():
     # parser.add_argument('--data_dir', type=str,
     #                     default=os.environ.get('SM_CHANNEL_TRAIN', '../input/data/ICDAR17_ALL'))
 
-    parser.add_argument('--data_dir', type=str, nargs='+', default=['/opt/ml/input/data/AIHUB', '/opt/ml/input/data/ICDAR17_train_cv'])
+    parser.add_argument('--data_dir', type=str, nargs='+', default=['/opt/ml/input/data/AIHUB', '/opt/ml/input/data/ICDAR17_train_cv', '/opt/ml/input/data/ICDAR17_Korean'])
 
     parser.add_argument('--val_data_dir', type=str,
                         default=os.environ.get('SM_CHANNEL_TRAIN', '../input/data/ICDAR17_Korean'))
     # parser.add_argument('--json_dir', type=str,
     #                     default='/opt/ml/input/data/ICDAR17_ALL/ufo/train.json', help='train json directory')
     parser.add_argument('--json_dir', type=str, nargs='+',
-                        default=['/opt/ml/input/data/AIHUB/ufo/valid.json', '/opt/ml/input/data/ICDAR17_train_cv/ufo/train.json'], help='train json directory')
+                        default=['/opt/ml/input/data/AIHUB/ufo/valid.json', '/opt/ml/input/data/ICDAR17_train_cv/ufo/train.json', '/opt/ml/input/data/ICDAR17_Korean/ufo/train.json'], help='train json directory')
 
     
     parser.add_argument('--val_json_dir', type=str,
