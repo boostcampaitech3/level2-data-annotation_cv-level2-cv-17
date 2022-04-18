@@ -4,7 +4,7 @@ from argparse import ArgumentParser
 
 import torch
 from torch import cuda
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, ConcatDataset
 from torch.optim import lr_scheduler
 
 import math
@@ -31,14 +31,10 @@ from custom_scheduler import CosineAnnealingWarmUpRestarts
 def parse_args():
     parser = ArgumentParser()
     # directory
-    parser.add_argument('--data_dir', type=str,
-                        default=os.environ.get('SM_CHANNEL_TRAIN', '../input/data/ICDAR17_ALL'))
+    parser.add_argument('--data_dir', type=str, nargs='+', default=['/opt/ml/input/data/AIHUB', '/opt/ml/input/data/ICDAR17_train_cv'])
     parser.add_argument('--val_data_dir', type=str,
-                        default=os.environ.get('SM_CHANNEL_TRAIN', '../input/data/ICDAR17_Korean'))
-    parser.add_argument('--json_dir', type=str,
-                        default='/opt/ml/input/data/ICDAR17_ALL/ufo/train.json', help='train json directory')
-    parser.add_argument('--val_json_dir', type=str,
-                        default='/opt/ml/input/data/ICDAR17_Korean/ufo/train.json', help='valid json directory')
+                        default=os.environ.get('SM_CHANNEL_TRAIN', '/opt/ml/input/data/ICDAR17_valid_cv'))
+
     parser.add_argument('--work_dir', type=str, default='./work_dirs',
                         help='the root dir to save logs and models about each experiment')
     # run environment
@@ -58,7 +54,7 @@ def parse_args():
     parser.add_argument('--optm', type=str, default='adam')
     parser.add_argument('--schd', type=str, default='multisteplr')
     # etc
-    parser.add_argument('--sweep', type=bool, default=True, help='sweep option')
+    parser.add_argument('--sweep', type=bool, default=False, help='sweep option')
 
     args = parser.parse_args()
     if args.input_size % 32 != 0: raise ValueError('`input_size` must be a multiple of 32')
@@ -66,23 +62,21 @@ def parse_args():
 
 
 def do_training(
-    data_dir, val_data_dir, json_dir, val_json_dir, work_dir, work_dir_exp,
+    data_dir, val_data_dir, work_dir, work_dir_exp,
     device, seed, num_workers, save_interval, save_max_num, train_eval, eval_interval,
     image_size, input_size, batch_size, learning_rate, max_epoch, optm, schd,
     sweep
     ):
     set_seeds(seed)
-    
-    # you can control json_name by adjusting args.json_dir
-    json_name = json_dir.split('/')[-1].split('.')[0]
-    dataset = SceneTextDataset(data_dir, split=json_name, image_size=image_size, crop_size=input_size)
-    dataset = EASTDataset(dataset)
+
+    # train CV dataset
+    dataset = [SceneTextDataset(i, split='train', image_size=image_size, crop_size=input_size) for ind, i in enumerate(data_dir)]
+    dataset = EASTDataset(ConcatDataset(dataset))
     num_batches = math.ceil(len(dataset) / batch_size)
     train_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
     
-    # you can control val_json_name by adjusting args.val_json_dir
-    val_json_name = val_json_dir.split('/')[-1].split('.')[0]
-    val_dataset = SceneTextDataset(val_data_dir, split=val_json_name, image_size=image_size, crop_size=input_size)
+    # valid CV dataset
+    val_dataset = SceneTextDataset(val_data_dir, split='valid', image_size=image_size, crop_size=input_size)
     val_dataset = EASTDataset(val_dataset)
     val_num_batches = math.ceil(len(val_dataset) / batch_size)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
@@ -140,21 +134,6 @@ def do_training(
                 'ang_loss': epoch_ang_loss/num_batches, 'iou_loss': epoch_iou_loss/num_batches,
             })
 
-        # train evaluation
-        if train_eval is not False and (epoch + 1) % eval_interval == 0:
-            gt_ufo = read_json(json_dir)
-            # ckpt_fpath : we don't use in here
-            # split : train image_folder_name
-            pred_ufo = do_inference(model=model, input_size=input_size, batch_size=batch_size,
-                                    data_dir=data_dir, ckpt_fpath=None, split='images')
-            
-            epoch_precison, epoch_recall, epoch_hmean = do_evaluating(gt_ufo, pred_ufo)
-            wandb.log({
-                "train_metric/precision": epoch_precison,
-                "train_metric/recall": epoch_recall,
-                "train_metric/hmean": epoch_hmean,
-            }, commit=False)
-
         # valid
         model.eval()
         val_epoch_loss, val_epoch_cls_loss, val_epoch_ang_loss, val_epoch_iou_loss = 0, 0, 0, 0
@@ -180,7 +159,7 @@ def do_training(
 
         # valid evaluation
         if (epoch + 1) % eval_interval == 0:
-            gt_ufo = read_json(val_json_dir)
+            gt_ufo = read_json(osp.join(val_data_dir, 'ufo/valid.json'))
             # ckpt_fpath : we don't use in here
             # split : valid image_folder_name
             pred_ufo = do_inference(model=model, input_size=input_size, batch_size=batch_size,
@@ -266,7 +245,7 @@ def main(args):
         # if you want to use tags, put tags=['something'] in wandb.init
         # if you want to use group, put group='something' in wandb.init
         wandb.init(
-            entity='mg_generation', project='data_annotation_dongwoo',
+            entity='mg_generation', project='data_annotation_baekkr',
             name=args.work_dir_exp.split('/')[-1],
             config=args.__dict__, reinit=True
         )
@@ -283,7 +262,7 @@ if __name__ == '__main__':
     if args.sweep:
         sweep_cfg = get_sweep_cfg()
         # you must to change project name
-        sweep_id = wandb.sweep(sweep=sweep_cfg, entity='mg_generation', project='data_annotation_dongwoo')
+        sweep_id = wandb.sweep(sweep=sweep_cfg, entity='mg_generation', project='data_annotation_baekkr')
         wandb.agent(sweep_id=sweep_id, function=partial(main, args))
     else:
         main(args)
