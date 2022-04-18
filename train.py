@@ -31,10 +31,10 @@ from custom_scheduler import CosineAnnealingWarmUpRestarts
 def parse_args():
     parser = ArgumentParser()
     # directory
-    parser.add_argument('--data_dir', type=str, nargs='+', default=['/opt/ml/input/data/AIHUB', '/opt/ml/input/data/ICDAR17_train_cv'])
-    parser.add_argument('--val_data_dir', type=str,
-                        default=os.environ.get('SM_CHANNEL_TRAIN', '/opt/ml/input/data/ICDAR17_valid_cv'))
-
+    parser.add_argument('--data_dir', type=str, nargs='+', default=['/opt/ml/input/data/ICDAR17_ALL','/opt/ml/input/data/ICDAR17_Korean'],
+                        help='the dir that have images and ufo/train.json in sub_directories')
+    parser.add_argument('--val_data_dir', type=str, default='/opt/ml/input/data/AIHUB_outside_sample',
+                        help='the dir that have images and ufo/valid.json in sub_directories')
     parser.add_argument('--work_dir', type=str, default='./work_dirs',
                         help='the root dir to save logs and models about each experiment')
     # run environment
@@ -43,7 +43,6 @@ def parse_args():
     parser.add_argument('--num_workers', type=int, default=8, help='dataloader num_workers')
     parser.add_argument('--save_interval', type=int, default=5, help='model save interval')
     parser.add_argument('--save_max_num', type=int, default=10, help='the max number of model save files')
-    parser.add_argument('--train_eval', type=bool, default=False, help='boolean about evaluation on train dataset')
     parser.add_argument('--eval_interval', type=int, default=1, help='evaluation metric log interval')
     # training parameter
     parser.add_argument('--image_size', type=int, default=1024)
@@ -63,7 +62,7 @@ def parse_args():
 
 def do_training(
     data_dir, val_data_dir, work_dir, work_dir_exp,
-    device, seed, num_workers, save_interval, save_max_num, train_eval, eval_interval,
+    device, seed, num_workers, save_interval, save_max_num, eval_interval,
     image_size, input_size, batch_size, learning_rate, max_epoch, optm, schd,
     sweep
     ):
@@ -105,7 +104,7 @@ def do_training(
         scheduler = lr_scheduler.ReduceLROnPlateau(optimizer)
     elif schd == 'cosignlr':
         scheduler = CosineAnnealingWarmUpRestarts(
-            optimizer, T_0=50, T_mult=1, eta_max=learning_rate, T_up=5, gamma=0.5)
+            optimizer, T_0=max_epoch, T_mult=1, eta_max=learning_rate, T_up=max_epoch//10, gamma=0.5)
     
     for epoch in range(max_epoch):
         # train
@@ -233,11 +232,7 @@ def main(args):
         wandb_run.name = args.work_dir_exp.split('/')[-1]  # run name
         
         args = update_args(args, wandb.config)
-        
-        # save args as yaml file every experiment
-        yamldir = osp.join(os.getcwd(), args.work_dir_exp+'/train_config.yml')
-        with open(yamldir, 'w') as f: yaml.dump(args.__dict__, f, indent=4)
-        
+
         do_training(**args.__dict__)
         wandb_run.finish()
     else:
@@ -245,16 +240,15 @@ def main(args):
         # if you want to use tags, put tags=['something'] in wandb.init
         # if you want to use group, put group='something' in wandb.init
         wandb.init(
-            entity='mg_generation', project='data_annotation_baekkr',
+            entity='mg_generation', project='data_annotation_dongwoo',
             name=args.work_dir_exp.split('/')[-1],
             config=args.__dict__, reinit=True
         )
-        
-        # save args as yaml file every experiment
-        yamldir = osp.join(os.getcwd(), args.work_dir_exp+'/train_config.yml')
-        with open(yamldir, 'w') as f: yaml.dump(args.__dict__, f, indent=4)
-
         do_training(**args.__dict__)
+    
+    # save args as yaml file every experiment
+    yamldir = osp.join(os.getcwd(), args.work_dir_exp+'/train_config.yml')
+    with open(yamldir, 'w') as f: yaml.dump(args.__dict__, f, indent=4)
 
 
 if __name__ == '__main__':
@@ -262,7 +256,7 @@ if __name__ == '__main__':
     if args.sweep:
         sweep_cfg = get_sweep_cfg()
         # you must to change project name
-        sweep_id = wandb.sweep(sweep=sweep_cfg, entity='mg_generation', project='data_annotation_baekkr')
+        sweep_id = wandb.sweep(sweep=sweep_cfg, entity='mg_generation', project='data_annotation_dongwoo')
         wandb.agent(sweep_id=sweep_id, function=partial(main, args))
     else:
         main(args)

@@ -2,7 +2,7 @@ import json
 import os
 import os.path as osp
 from glob import glob
-from PIL import Image
+from PIL import Image, ImageOps
 
 import numpy as np
 from tqdm import tqdm
@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader, ConcatDataset, Dataset
 
 
 SRC_DATASET_DIR = '/data/datasets/ICDAR17_MLT'  # FIXME
-DST_DATASET_DIR = '/data/datasets/ICDAR17_Korean'  # FIXME
+DST_DATASET_DIR = '/data/datasets/ICDAR17_ALL'  # FIXME
 
 NUM_WORKERS = 32  # FIXME
 
@@ -47,8 +47,10 @@ class MLT17Dataset(Dataset):
             assert label_path in label_paths
 
             words_info, extra_info = self.parse_label_file(label_path)
-            if 'ko' not in extra_info['languages'] or extra_info['languages'].difference({'ko', 'en'}):
-                continue
+            # you must check this
+            # if you save only 'ko'
+            # if 'ko' not in extra_info['languages'] or extra_info['languages'].difference({'ko', 'en'}):
+            #     continue
 
             sample_ids.append(sample_id)
             samples_info[sample_id] = dict(image_path=image_path, label_path=label_path,
@@ -66,6 +68,7 @@ class MLT17Dataset(Dataset):
 
         image_fname = osp.basename(sample_info['image_path'])
         image = Image.open(sample_info['image_path'])
+        image = ImageOps.exif_transpose(image)
         img_w, img_h = image.size
 
         if self.copy_images_to:
