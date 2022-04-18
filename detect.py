@@ -128,3 +128,35 @@ def detect(model, images, input_size):
         by_sample_bboxes.append(bboxes)
 
     return by_sample_bboxes
+
+def detect_for_val(model, images, input_size):
+    '''
+        images : ndarray
+    '''
+    # images에 대한 transforms
+    prep_fn = A.Compose([
+        LongestMaxSize(input_size), A.PadIfNeeded(min_height=input_size, min_width=input_size,
+                                                  position=A.PadIfNeeded.PositionType.TOP_LEFT),
+        A.Normalize(), ToTensorV2()])
+    device = list(model.parameters())[0].device
+
+    # batch 개수만큼 이미지 리스트 저장
+    batch, orig_sizes = [], []
+    for image in images:
+        orig_sizes.append(image.shape[:2])
+        batch.append(prep_fn(image=image)['image'])
+    batch = torch.stack(batch, dim=0).to(device) # b, 3, 512, 512
+    with torch.no_grad():
+        score_maps, geo_maps = model(batch)
+    score_maps, geo_maps = score_maps.cpu().numpy(), geo_maps.cpu().numpy()
+    by_sample_bboxes = []
+    for score_map, geo_map, orig_size in zip(score_maps, geo_maps, orig_sizes):
+        bboxes = get_bboxes(score_map, geo_map)
+        if bboxes is None:
+            bboxes = np.zeros((0, 4, 2), dtype=np.float32)
+        else:
+            bboxes = bboxes[:, :8].reshape(-1, 4, 2)
+            bboxes *= max(orig_size) / input_size
+        by_sample_bboxes.append(bboxes)
+
+    return by_sample_bboxes

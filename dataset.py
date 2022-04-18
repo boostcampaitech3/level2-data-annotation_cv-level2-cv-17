@@ -10,7 +10,6 @@ import albumentations as A
 from torch.utils.data import Dataset
 from shapely.geometry import Polygon
 
-
 def cal_distance(x1, y1, x2, y2):
     '''calculate the Euclidean distance'''
     return math.sqrt((x1 - x2)**2 + (y1 - y2)**2)
@@ -342,6 +341,7 @@ class SceneTextDataset(Dataset):
         self.anno = anno
         self.image_fnames = sorted(anno['images'].keys())
         self.image_dir = osp.join(root_dir, 'images')
+        self.split = split
 
         self.image_size, self.crop_size = image_size, crop_size
         self.color_jitter, self.normalize = color_jitter, normalize
@@ -362,22 +362,29 @@ class SceneTextDataset(Dataset):
         vertices, labels = filter_vertices(vertices, labels, ignore_under=10, drop_under=1)
 
         image = Image.open(image_fpath)
-        image, vertices = resize_img(image, vertices, self.image_size)
-        image, vertices = adjust_height(image, vertices)
-        image, vertices = rotate_img(image, vertices)
-        image, vertices = crop_img(image, vertices, labels, self.crop_size)
+        if self.split == 'train':
+            image, vertices = resize_img(image, vertices, self.image_size)
+            image, vertices = adjust_height(image, vertices)
+            image, vertices = rotate_img(image, vertices)
+            image, vertices = crop_img(image, vertices, labels, self.crop_size)
 
-        if image.mode != 'RGB':
-            image = image.convert('RGB')
-        image = np.array(image)
+            if image.mode != 'RGB':
+                image = image.convert('RGB')
+            image = np.array(image)
 
-        funcs = []
-        if self.color_jitter:
-            funcs.append(A.ColorJitter(0.5, 0.5, 0.5, 0.25))
-        if self.normalize:
-            funcs.append(A.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)))
+            funcs = []
+            if self.color_jitter:
+                funcs.append(A.ColorJitter(0.5, 0.5, 0.5, 0.25))
+            if self.normalize:
+                funcs.append(A.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)))
+        else:
+            image, vertices = resize_img(image, vertices, self.image_size)
+            image, vertices = crop_img(image, vertices, labels, self.crop_size)
+            if image.mode != 'RGB':
+                image = image.convert('RGB')
+            image = np.array(image)
+            funcs = []
         transform = A.Compose(funcs)
-
         image = transform(image=image)['image']
         word_bboxes = np.reshape(vertices, (-1, 4, 2))
         roi_mask = generate_roi_mask(image, vertices, labels)

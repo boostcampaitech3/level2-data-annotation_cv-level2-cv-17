@@ -23,6 +23,11 @@ from functools import reduce, partial
 from sweep import update_args, get_sweep_cfg
 from utils import increment_path, set_seeds
 
+# added for validation result viz
+from torchvision.transforms.functional import to_pil_image
+from detect import detect_for_val
+from PIL import ImageDraw
+
 
 def parse_args():
     parser = ArgumentParser()
@@ -120,6 +125,22 @@ def do_training(
                 val_epoch_iou_loss += extra_info['iou_loss']
 
                 pbar.update(1)
+
+                # detect and return result
+                d_img = img.permute(0,2,3,1).detach().cpu().numpy()
+                bbox = detect_for_val(model, d_img, input_size)
+                pil_img_list = [to_pil_image(im) for im in img]
+                poly_img_list = []
+                for pil_img, pts in zip(pil_img_list, bbox):
+                    if len(pts) == 0:
+                        continue
+                    draw = ImageDraw.Draw(pil_img)
+                    for i in pts:
+                        # pt = [tuple(p) for p in i]
+                        draw.polygon(i, outline='red')
+                    poly_img_list.append(wandb.Image(pil_img))
+                wandb.log({'Results':poly_img_list})
+
             # now, set_postfix is about one epoch
             pbar.set_postfix({
                 'loss': val_epoch_loss/val_num_batches, 'cls_loss': val_epoch_cls_loss/val_num_batches,
@@ -158,7 +179,7 @@ def main(args):
         # if you want to use tags, put tags=['something'] in wandb.init
         # if you want to use group, put group='something' in wandb.init
         wandb.init(
-            entity='mg_generation', project='data_annotation_dongwoo',
+            entity='mg_generation', project='data_annotation_seonah',
             name=args.work_dir_exp.split('/')[-1],
             config=args.__dict__, reinit=True
         )
@@ -174,7 +195,7 @@ if __name__ == '__main__':
     if args.sweep:
         sweep_cfg = get_sweep_cfg()
         # you must to change project name
-        sweep_id = wandb.sweep(sweep=sweep_cfg, entity='mg_generation', project='data_annotation_dongwoo')
+        sweep_id = wandb.sweep(sweep=sweep_cfg, entity='mg_generation', project='data_annotation_seonah')
         wandb.agent(sweep_id=sweep_id, function=partial(main, args))
     else:
         main(args)
