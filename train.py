@@ -150,9 +150,9 @@ def do_training(
             
             epoch_precison, epoch_recall, epoch_hmean = do_evaluating(gt_ufo, pred_ufo)
             wandb.log({
-                "train_metric/precision": epoch_precison/num_batches,
-                "train_metric/recall": epoch_recall/num_batches,
-                "train_metric/hmean": epoch_hmean/num_batches,
+                "train_metric/precision": epoch_precison,
+                "train_metric/recall": epoch_recall,
+                "train_metric/hmean": epoch_hmean,
             }, commit=False)
 
         # valid
@@ -187,9 +187,9 @@ def do_training(
                                     data_dir=val_data_dir, ckpt_fpath=None, split='images')
             val_epoch_precison, val_epoch_recall, val_epoch_hmean = do_evaluating(gt_ufo, pred_ufo)
             wandb.log({
-                "valid_metric/precision": val_epoch_precison/val_num_batches,
-                "valid_metric/recall": val_epoch_recall/val_num_batches,
-                "valid_metric/hmean": val_epoch_hmean/val_num_batches,
+                "valid_metric/precision": val_epoch_precison,
+                "valid_metric/recall": val_epoch_recall,
+                "valid_metric/hmean": val_epoch_hmean,
             }, commit=False)
 
         # ReduceLROnPlateau scheduler consider valid loss when doing step
@@ -218,6 +218,7 @@ def do_training(
 
 def do_evaluating(gt_ufo, pred_ufo):
     epoch_precison, epoch_recall, epoch_hmean = 0, 0, 0
+    num_images = len(gt_ufo['images'])
     
     for pred_image, gt_image in zip(sorted(pred_ufo['images'].items()), sorted(gt_ufo['images'].items())):
         pred_bboxes_dict, gt_bboxes_dict, gt_trans_dict = {}, {}, {}
@@ -239,7 +240,7 @@ def do_evaluating(gt_ufo, pred_ufo):
         epoch_recall += eval_metric['total']['recall']
         epoch_hmean += eval_metric['total']['hmean']
     
-    return epoch_precison, epoch_recall, epoch_hmean
+    return epoch_precison/num_images, epoch_recall/num_images, epoch_hmean/num_images
 
 
 def main(args):
