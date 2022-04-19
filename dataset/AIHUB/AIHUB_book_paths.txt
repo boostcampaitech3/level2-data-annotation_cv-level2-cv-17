@@ -1,0 +1,11 @@
+/opt/ml/input/data/AIHUB_outside_bookcover/gt/2.#Ucc45#Ud45c#Uc9c0/10.#Uc5ed#Uc0ac
+/opt/ml/input/data/AIHUB_outside_bookcover/gt/2.#Ucc45#Ud45c#Uc9c0/07.#Uc608#Uc220
+/opt/ml/input/data/AIHUB_outside_bookcover/gt/2.#Ucc45#Ud45c#Uc9c0/08.#Uc5b8#Uc5b4
+/opt/ml/input/data/AIHUB_outside_bookcover/gt/2.#Ucc45#Ud45c#Uc9c0/09.#Ubb38#Ud559
+/opt/ml/input/data/AIHUB_outside_bookcover/gt/2.#Ucc45#Ud45c#Uc9c0/01.#Ucd1d#Ub958
+/opt/ml/input/data/AIHUB_outside_bookcover/gt/2.#Ucc45#Ud45c#Uc9c0/05.#Uc790#Uc5f0#Uacfc#Ud559
+/opt/ml/input/data/AIHUB_outside_bookcover/gt/2.#Ucc45#Ud45c#Uc9c0/04.#Uc0ac#Ud68c#Uacfc#Ud559
+/opt/ml/input/data/AIHUB_outside_bookcover/gt/2.#Ucc45#Ud45c#Uc9c0/02.#Ucca0#Ud559
+/opt/ml/input/data/AIHUB_outside_bookcover/gt/2.#Ucc45#Ud45c#Uc9c0/06.#Uae30#Uc220#Uacfc#Ud559
+/opt/ml/input/data/AIHUB_outside_bookcover/gt/2.#Ucc45#Ud45c#Uc9c0/11.#Uae30#Ud0c0
+/opt/ml/input/data/AIHUB_outside_bookcover/gt/2.#Ucc45#Ud45c#Uc9c0/03.#Uc885#Uad50
