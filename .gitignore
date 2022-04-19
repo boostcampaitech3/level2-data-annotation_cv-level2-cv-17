@@ -4,3 +4,4 @@ __pycache__/
 wandb/
 work_dirs/
 sweep.py
+augmentation.py
