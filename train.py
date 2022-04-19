@@ -31,9 +31,9 @@ from utils_vis import detect_valid
 import matplotlib.pyplot as plt
 from utils_vis import draw_bboxes, find_bbox_from_maps
 
-
 def parse_args():
     parser = ArgumentParser()
+    # directory
     parser.add_argument('--data_dir', type=str, nargs='+', default=['/opt/ml/input/data/ICDAR17_Korean'],
                         help='the dir that have images and ufo/train.json in sub_directories')
     parser.add_argument('--val_data_dir', type=str, nargs='+', default=['/opt/ml/input/data/AIHUB_outside_sample','/opt/ml/input/data/ICDAR17_Korean'],
