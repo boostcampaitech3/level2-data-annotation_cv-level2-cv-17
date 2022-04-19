@@ -31,9 +31,9 @@ from custom_scheduler import CosineAnnealingWarmUpRestarts
 def parse_args():
     parser = ArgumentParser()
     # directory
-    parser.add_argument('--data_dir', type=str, nargs='+', default=['/opt/ml/input/data/ICDAR17_ALL','/opt/ml/input/data/ICDAR17_Korean'],
+    parser.add_argument('--data_dir', type=str, nargs='+', default=['/opt/ml/input/data/ICDAR17_Korean'],
                         help='the dir that have images and ufo/train.json in sub_directories')
-    parser.add_argument('--val_data_dir', type=str, default='/opt/ml/input/data/AIHUB_outside_sample',
+    parser.add_argument('--val_data_dir', type=str, nargs='+', default=['/opt/ml/input/data/AIHUB_outside_sample','/opt/ml/input/data/ICDAR17_Korean'],
                         help='the dir that have images and ufo/valid.json in sub_directories')
     parser.add_argument('--work_dir', type=str, default='./work_dirs',
                         help='the root dir to save logs and models about each experiment')
@@ -75,8 +75,8 @@ def do_training(
     train_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
     
     # valid CV dataset
-    val_dataset = SceneTextDataset(val_data_dir, split='valid', image_size=image_size, crop_size=input_size)
-    val_dataset = EASTDataset(val_dataset)
+    val_dataset = [SceneTextDataset(i, split='valid', image_size=image_size, crop_size=input_size) for ind, i in enumerate(val_data_dir)]
+    val_dataset = EASTDataset(ConcatDataset(val_dataset))
     val_num_batches = math.ceil(len(val_dataset) / batch_size)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
 
@@ -156,18 +156,23 @@ def do_training(
                 'ang_loss': val_epoch_ang_loss/val_num_batches, 'iou_loss': val_epoch_iou_loss/val_num_batches,
             })
 
-        # valid evaluation
+        # evaluation
         if (epoch + 1) % eval_interval == 0:
-            gt_ufo = read_json(osp.join(val_data_dir, 'ufo/valid.json'))
-            # ckpt_fpath : we don't use in here
-            # split : valid image_folder_name
-            pred_ufo = do_inference(model=model, input_size=input_size, batch_size=batch_size,
-                                    data_dir=val_data_dir, ckpt_fpath=None, split='images')
-            val_epoch_precison, val_epoch_recall, val_epoch_hmean = do_evaluating(gt_ufo, pred_ufo)
+            all_precision, all_recall, all_hmean = 0, 0, 0
+            for i in val_data_dir:
+                gt_ufo = read_json(osp.join(i, 'ufo/valid.json'))
+                # ckpt_fpath : we don't use in here
+                # split : valid image_folder_name
+                pred_ufo = do_inference(model=model, input_size=input_size, batch_size=batch_size,
+                                        data_dir=i, ckpt_fpath=None, split='images')
+                precision, recall, hmean = do_evaluating(gt_ufo, pred_ufo)
+                all_precision += precision
+                all_recall += recall
+                all_hmean += hmean
             wandb.log({
-                "valid_metric/precision": val_epoch_precison,
-                "valid_metric/recall": val_epoch_recall,
-                "valid_metric/hmean": val_epoch_hmean,
+                "valid_metric/precision": all_precision/len(val_data_dir),
+                "valid_metric/recall": all_recall/len(val_data_dir),
+                "valid_metric/hmean": all_hmean/len(val_data_dir),
             }, commit=False)
 
         # ReduceLROnPlateau scheduler consider valid loss when doing step
