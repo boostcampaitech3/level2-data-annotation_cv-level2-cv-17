@@ -156,9 +156,9 @@ if __name__ == '__main__':
                         help='ICDAR version')
     parser.add_argument('--ufo_name', '-n', type=str, default="train",
                         help='ufo foramt json name')
-    parser.add_argument('--korean', '-k', type=bool, default=True,
+    parser.add_argument('--korean', '-k', type=bool, default=False,
                         help='only save korean language')
-    parser.add_argument('--copy', '-c', type=bool, default=True,
+    parser.add_argument('--copy', '-c', type=bool, default=False,
                         help='if you want to copy image, it make slow')
     args = parser.parse_args()
     main(args=args)
