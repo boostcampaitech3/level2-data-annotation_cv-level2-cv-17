@@ -98,3 +98,19 @@ def update_json(json_dir, extension_list):
     # update train.json without extension file
     with open(json_dir, 'w') as f:
         json.dump(json_file, f, indent=4)
+
+def delete_gt(folder_dir, ufo_name, version):
+    gt_dir = osp.join(folder_dir, 'gt')
+    json_dir = osp.join(folder_dir, f'ufo/{ufo_name}.json')
+    image_dir = osp.join(folder_dir, 'images')
+
+    json_file = read_json(json_dir)
+    json_num_list = [i.split('.')[0].split('_')[-1] for i in json_file['images'].keys()]
+    
+    for i in glob.glob(f"{gt_dir}/*.txt"):
+        gt_num = i.split('.')[0].split('_')[-1]
+        if gt_num not in json_num_list:
+            if version == "17":
+                os.remove(osp.join(gt_dir, f"gt_img_{gt_num}.txt"))
+            elif version == "19":
+                os.remove(osp.join(gt_dir, f"tr_img_{gt_num}.txt"))

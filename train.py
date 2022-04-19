@@ -28,15 +28,16 @@ from utils import increment_path, set_seeds, read_json
 from custom_scheduler import CosineAnnealingWarmUpRestarts
 from utils_vis import detect_valid
 
-import matplotlib.pyplot as plt
-from utils_vis import draw_bboxes, find_bbox_from_maps
+import matplotlib as mpl
+mpl.rcParams.update({'figure.max_open_warning': 0})
+
 
 def parse_args():
     parser = ArgumentParser()
     # directory
-    parser.add_argument('--data_dir', type=str, nargs='+', default=['/opt/ml/input/data/ICDAR17_Korean'],
+    parser.add_argument('--data_dir', type=str, nargs='+', default=['/opt/ml/input/data/ICDAR19/all'],
                         help='the dir that have images and ufo/train.json in sub_directories')
-    parser.add_argument('--val_data_dir', type=str, nargs='+', default=['/opt/ml/input/data/AIHUB_outside_sample','/opt/ml/input/data/ICDAR17_Korean'],
+    parser.add_argument('--val_data_dir', type=str, nargs='+', default=['/opt/ml/input/data/ICDAR17/train_ko','/opt/ml/input/data/ICDAR17/valid_ko','/opt/ml/input/data/ICDAR19/ko'],
                         help='the dir that have images and ufo/valid.json in sub_directories')
     parser.add_argument('--work_dir', type=str, default='./work_dirs',
                         help='the root dir to save logs and models about each experiment')
@@ -57,6 +58,7 @@ def parse_args():
     parser.add_argument('--schd', type=str, default='multisteplr')
     # etc
     parser.add_argument('--sweep', type=bool, default=False, help='sweep option')
+    parser.add_argument('--composed', type=bool, default=False, help='composed augmentation option')
 
     args = parser.parse_args()
     if args.input_size % 32 != 0: raise ValueError('`input_size` must be a multiple of 32')
@@ -67,18 +69,18 @@ def do_training(
     data_dir, val_data_dir, work_dir, work_dir_exp,
     device, seed, num_workers, save_interval, save_max_num, eval_interval,
     image_size, input_size, batch_size, learning_rate, max_epoch, optm, schd,
-    sweep
+    sweep, composed
     ):
     set_seeds(seed)
 
     # train CV dataset
-    dataset = [SceneTextDataset(i, split='train', image_size=image_size, crop_size=input_size) for ind, i in enumerate(data_dir)]
+    dataset = [SceneTextDataset(i, split='train', image_size=image_size, crop_size=input_size, composed=composed) for ind, i in enumerate(data_dir)]
     dataset = EASTDataset(ConcatDataset(dataset))
     num_batches = math.ceil(len(dataset) / batch_size)
     train_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
     
     # valid CV dataset
-    val_dataset = [SceneTextDataset(i, split='valid', image_size=image_size, crop_size=input_size) for ind, i in enumerate(val_data_dir)]
+    val_dataset = [SceneTextDataset(i, split='valid', image_size=image_size, crop_size=input_size, composed=composed) for ind, i in enumerate(val_data_dir)]
     val_dataset = EASTDataset(ConcatDataset(val_dataset))
     val_num_batches = math.ceil(len(val_dataset) / batch_size)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
@@ -264,7 +266,7 @@ def main(args):
         # if you want to use tags, put tags=['something'] in wandb.init
         # if you want to use group, put group='something' in wandb.init
         wandb.init(
-            entity='mg_generation', project='data_annotation_seonah',
+            entity='mg_generation', project='data_annotation_dongwoo',
             name=args.work_dir_exp.split('/')[-1],
             config=args.__dict__, reinit=True
         )
@@ -280,7 +282,7 @@ if __name__ == '__main__':
     if args.sweep:
         sweep_cfg = get_sweep_cfg()
         # you must to change project name
-        sweep_id = wandb.sweep(sweep=sweep_cfg, entity='mg_generation', project='data_annotation_seonah')
+        sweep_id = wandb.sweep(sweep=sweep_cfg, entity='mg_generation', project='data_annotation_dongwoo')
         wandb.agent(sweep_id=sweep_id, function=partial(main, args))
     else:
         main(args)

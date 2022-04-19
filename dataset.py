@@ -337,7 +337,7 @@ def filter_vertices(vertices, labels, ignore_under=0, drop_under=0):
 
 class SceneTextDataset(Dataset):
     def __init__(self, root_dir, split='train', image_size=1024, crop_size=512, color_jitter=True,
-                 normalize=True):
+                 normalize=True, composed=False):
         with open(osp.join(root_dir, 'ufo/{}.json'.format(split)), 'r') as f:
             anno = json.load(f)
 
@@ -349,6 +349,7 @@ class SceneTextDataset(Dataset):
         self.color_jitter, self.normalize = color_jitter, normalize
 
         self.split = split
+        self.composed = composed
 
         ## ComposedTransformation init
         self.train_transforms = ComposedTransformation(
@@ -383,30 +384,45 @@ class SceneTextDataset(Dataset):
         vertices, labels = filter_vertices(vertices, labels, ignore_under=10, drop_under=1)
 
         image = Image.open(image_fpath)
-        # 사진이 rotate되는 현상 방지 
-        image = ImageOps.exif_transpose(image)  
+        image = ImageOps.exif_transpose(image)
 
+        if self.composed is True:  # use composed augmentation
+            if image.mode != 'RGB':
+                image = image.convert('RGB')
+            image = np.array(image)
+
+            word_bboxes = np.reshape(vertices, (-1, 4, 2))
+
+            if self.split == 'train':  # only training
+                composed_transform = self.train_transforms(image=image, word_bboxes=word_bboxes)
+            else:
+                composed_transform = self.valid_transforms(image=image, word_bboxes=word_bboxes)
             
-        if image.mode != 'RGB':
-            image = image.convert('RGB')
-        image = np.array(image)
-
-        word_bboxes = np.reshape(vertices, (-1, 4, 2))
-
-        if self.split == 'train':
-            ## ComposedTransformation 적용    
-            composed_transform = self.train_transforms(image=image, word_bboxes=word_bboxes)
             image = composed_transform['image']
             word_bboxes = composed_transform['word_bboxes']
+        
+        else:  # use base augmentation
+            image, vertices = resize_img(image, vertices, self.image_size)
+            if self.split == 'train':  # only training
+                image, vertices = adjust_height(image, vertices)
+                image, vertices = rotate_img(image, vertices)
+            image, vertices = crop_img(image, vertices, labels, self.crop_size)
 
-            roi_mask = generate_roi_mask(image, vertices, labels) 
+            if image.mode != 'RGB':
+                image = image.convert('RGB')
+            image = np.array(image)
 
-        else:
-            composed_transform = self.valid_transforms(image=image, word_bboxes=word_bboxes)
-            image = composed_transform['image']
-            word_bboxes = composed_transform['word_bboxes']
+            funcs = []
+            if self.split == 'train':  # only training
+                if self.color_jitter:
+                    funcs.append(A.ColorJitter(0.5, 0.5, 0.5, 0.25))
+            if self.normalize:
+                funcs.append(A.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)))
+            transform = A.Compose(funcs)
 
-            roi_mask = generate_roi_mask(image, vertices, labels) 
-
-
+            image = transform(image=image)['image']
+            word_bboxes = np.reshape(vertices, (-1, 4, 2))
+        
+        roi_mask = generate_roi_mask(image, vertices, labels)
+        
         return image, word_bboxes, roi_mask

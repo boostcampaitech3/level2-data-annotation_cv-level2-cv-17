@@ -10,7 +10,7 @@ from tqdm import tqdm
 
 from torch.utils.data import DataLoader, ConcatDataset, Dataset
 
-from utils import delete_image, update_json
+from utils import delete_image, update_json, delete_gt
 
 
 NUM_WORKERS = 32  # FIXME
@@ -30,7 +30,7 @@ def get_language_token(x):
 
 def maybe_mkdir(x):
     if not osp.exists(x):
-        os.makedirs(x)
+        os.makedirs(x, exist_ok=True)
 
 
 class MLTDataset(Dataset):
@@ -53,8 +53,11 @@ class MLTDataset(Dataset):
 
             words_info, extra_info = self.parse_label_file(label_path)
 
-            if args.korean is True:
+            if args.ko is True:
                 if 'ko' not in extra_info['languages'] or extra_info['languages'].difference({'ko', 'en'}):
+                    continue
+            if args.notko is True:
+                if 'ko' in extra_info['languages']:
                     continue
 
             sample_ids.append(sample_id)
@@ -144,21 +147,26 @@ def main(args):
                     extension_list=['png','gif'])
     update_json(json_dir=osp.join(ufo_dir, args.ufo_name+'.json'),
                 extension_list=['png','gif'])
+    delete_gt(folder_dir=args.SRC_DATASET_DIR,
+              ufo_name=args.ufo_name,
+              version=args.version)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--DST_DATASET_DIR', '-d', type=str, default="/opt/ml/input/data/ICDAR19/korean",
+    parser.add_argument('--DST_DATASET_DIR', '-d', type=str, default="/opt/ml/input/data/ICDAR19/notko",
                         help='destination directory')
-    parser.add_argument('--SRC_DATASET_DIR', '-s', type=str, default="/opt/ml/input/data/ICDAR19/raw",
+    parser.add_argument('--SRC_DATASET_DIR', '-s', type=str, default="/opt/ml/input/data/ICDAR19/all",
                         help='source directory')
     parser.add_argument('--version', '-v', type=str, default="19",
                         help='ICDAR version')
-    parser.add_argument('--ufo_name', '-n', type=str, default="train",
+    parser.add_argument('--ufo_name', '-u', type=str, default="train",  # -n >>> -u
                         help='ufo foramt json name')
-    parser.add_argument('--korean', '-k', type=bool, default=False,
+    parser.add_argument('--ko', '-k', type=bool, default=False,         # --korean >>> --ko 
                         help='only save korean language')
-    parser.add_argument('--copy', '-c', type=bool, default=False,
+    parser.add_argument('--notko', '-n', type=bool, default=True,       # ko + notko != all
+                        help='do not save korean language')
+    parser.add_argument('--copy', '-c', type=bool, default=True,
                         help='if you want to copy image, it make slow')
     args = parser.parse_args()
     main(args=args)
