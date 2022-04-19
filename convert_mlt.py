@@ -12,6 +12,7 @@ from torch.utils.data import DataLoader, ConcatDataset, Dataset
 
 from utils import delete_image, update_json
 
+
 NUM_WORKERS = 32  # FIXME
 
 IMAGE_EXTENSIONS = {'.gif', '.jpg', '.png'}
@@ -33,7 +34,7 @@ def maybe_mkdir(x):
 
 
 class MLTDataset(Dataset):
-    def __init__(self, image_dir, label_dir, copy_images_to=None, version=None):
+    def __init__(self, image_dir, label_dir, copy_images_to=None, copy=False, version=None):
         image_paths = {x for x in glob(osp.join(image_dir, '*')) if osp.splitext(x)[1] in
                        IMAGE_EXTENSIONS}
         label_paths = set(glob(osp.join(label_dir, '*.txt')))
@@ -52,10 +53,9 @@ class MLTDataset(Dataset):
 
             words_info, extra_info = self.parse_label_file(label_path)
 
-            # option -> if you want using the other languages, comment out below 2 lines
-
-            # if 'ko' not in extra_info['languages'] or extra_info['languages'].difference({'ko', 'en'}):
-            #     continue
+            if args.korean is True:
+                if 'ko' not in extra_info['languages'] or extra_info['languages'].difference({'ko', 'en'}):
+                    continue
 
             sample_ids.append(sample_id)
             samples_info[sample_id] = dict(image_path=image_path, label_path=label_path,
@@ -64,6 +64,7 @@ class MLTDataset(Dataset):
         self.sample_ids, self.samples_info = sample_ids, samples_info
 
         self.copy_images_to = copy_images_to
+        self.copy = copy
 
     def __len__(self):
         return len(self.sample_ids)
@@ -76,9 +77,10 @@ class MLTDataset(Dataset):
         image = ImageOps.exif_transpose(image)
         img_w, img_h = image.size
 
-        if self.copy_images_to:
-            maybe_mkdir(self.copy_images_to)
-            image.save(osp.join(self.copy_images_to, osp.basename(sample_info['image_path'])))
+        if self.copy is True:
+            if self.copy_images_to is not None:
+                maybe_mkdir(self.copy_images_to)
+                image.save(osp.join(self.copy_images_to, osp.basename(sample_info['image_path'])))
 
         license_tag = dict(usability=True, public=True, commercial=True, type='CC-BY-SA',
                            holder=None)
@@ -116,19 +118,13 @@ class MLTDataset(Dataset):
         return words_info, dict(languages=languages)
 
 
-
 def main(args):
     dst_image_dir = osp.join(args.DST_DATASET_DIR, 'images')
-    # dst_image_dir = None
 
-    mlt_train = MLTDataset(osp.join(args.SRC_DATASET_DIR, 'images'),
-                             osp.join(args.SRC_DATASET_DIR, 'gt'),
-                             version = args.version )
-                            #  copy_images_to=dst_image_dir)
-    # mlt_train_2 = MLTDataset(osp.join(args.SRC_DATASET_DIR, 'images'),
-    #                          osp.join(args.SRC_DATASET_DIR, 'gt'),)
-    #                         #  copy_images_to=dst_image_dir)
-    # mlt_train = ConcatDataset([mlt_train, mlt_train_2])
+    mlt_train = MLTDataset(image_dir=osp.join(args.SRC_DATASET_DIR, 'images'),
+                           label_dir=osp.join(args.SRC_DATASET_DIR, 'gt'),
+                           copy_images_to=dst_image_dir, copy=args.copy,
+                           version=args.version)
 
     anno = dict(images=dict())
     with tqdm(total=len(mlt_train)) as pbar:
@@ -140,36 +136,29 @@ def main(args):
     ufo_dir = osp.join(args.DST_DATASET_DIR, 'ufo')
 
     maybe_mkdir(ufo_dir)
-    with open(osp.join(ufo_dir, ufo_name), 'w') as f:
+    with open(osp.join(ufo_dir, args.ufo_name+'.json'), 'w') as f:
         json.dump(anno, f, indent=4)
     
-    delete_image(json_dir=osp.join(ufo_dir, ufo_name),
-                 image_dir=osp.join(DST_DATASET_DIR, 'images'),
-                 extension_list=['png','gif'])
-    update_json(json_dir=osp.join(ufo_dir, ufo_name),
+    delete_image(json_dir=osp.join(ufo_dir, args.ufo_name+'.json'),
+                    image_dir=dst_image_dir,
+                    extension_list=['png','gif'])
+    update_json(json_dir=osp.join(ufo_dir, args.ufo_name+'.json'),
                 extension_list=['png','gif'])
 
 
-SRC_DATASET_DIR = '/opt/ml/input/data/ICDAR17_MLT'  # FIXME
-DST_DATASET_DIR = '/opt/ml/input/data/ICDAR17_ALL_valid'  # FIXME
-
-NUM_WORKERS = 32  # FIXME
-
-IMAGE_EXTENSIONS = {'.gif', '.jpg', '.png'}
-
-LANGUAGE_MAP = {
-    'Korean': 'ko',
-    'Latin': 'en',
-    'Symbols': None
-}
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--DST_DATASET_DIR', '-d', type=str, default="/opt/ml/input/data/ICDAR19",
-                        help='destination json directory')
-    parser.add_argument('--SRC_DATASET_DIR', '-s', type=str, default="/opt/ml/input/data/ICDAR19",
-                        help='source json directory')
+    parser.add_argument('--DST_DATASET_DIR', '-d', type=str, default="/opt/ml/input/data/ICDAR19/korean",
+                        help='destination directory')
+    parser.add_argument('--SRC_DATASET_DIR', '-s', type=str, default="/opt/ml/input/data/ICDAR19/raw",
+                        help='source directory')
     parser.add_argument('--version', '-v', type=str, default="19",
                         help='ICDAR version')
+    parser.add_argument('--ufo_name', '-n', type=str, default="train",
+                        help='ufo foramt json name')
+    parser.add_argument('--korean', '-k', type=bool, default=False,
+                        help='only save korean language')
+    parser.add_argument('--copy', '-c', type=bool, default=False,
+                        help='if you want to copy image, it make slow')
     args = parser.parse_args()
     main(args=args)
