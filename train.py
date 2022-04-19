@@ -27,10 +27,10 @@ from sweep import update_args, get_sweep_cfg
 from utils import increment_path, set_seeds, read_json
 from custom_scheduler import CosineAnnealingWarmUpRestarts
 
-
 def parse_args():
     parser = ArgumentParser()
     # directory
+
     parser.add_argument('--data_dir', type=str, nargs='+', default=['/opt/ml/input/data/ICDAR17_Korean'],
                         help='the dir that have images and ufo/train.json in sub_directories')
     parser.add_argument('--val_data_dir', type=str, nargs='+', default=['/opt/ml/input/data/AIHUB_outside_sample','/opt/ml/input/data/ICDAR17_Korean'],
