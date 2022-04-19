@@ -34,14 +34,10 @@ from utils_vis import draw_bboxes, find_bbox_from_maps
 
 def parse_args():
     parser = ArgumentParser()
-    # directory
-    parser.add_argument('--data_dir', type=str, nargs='+', default=['/opt/ml/input/data/ICDAR17_Korean'])
-    parser.add_argument('--val_data_dir', type=str,
-                        default=os.environ.get('SM_CHANNEL_TRAIN', '/opt/ml/input/data/ICDAR17_Korean'))
-    # parser.add_argument('--data_dir', type=str, nargs='+', default=['/opt/ml/input/data/AIHUB', '/opt/ml/input/data/ICDAR17_train_cv'])
-    # parser.add_argument('--val_data_dir', type=str,
-    #                     default=os.environ.get('SM_CHANNEL_TRAIN', '/opt/ml/input/data/ICDAR17_valid_cv'))
-
+    parser.add_argument('--data_dir', type=str, nargs='+', default=['/opt/ml/input/data/ICDAR17_Korean'],
+                        help='the dir that have images and ufo/train.json in sub_directories')
+    parser.add_argument('--val_data_dir', type=str, nargs='+', default=['/opt/ml/input/data/AIHUB_outside_sample','/opt/ml/input/data/ICDAR17_Korean'],
+                        help='the dir that have images and ufo/valid.json in sub_directories')
     parser.add_argument('--work_dir', type=str, default='./work_dirs',
                         help='the root dir to save logs and models about each experiment')
     # run environment
@@ -50,7 +46,6 @@ def parse_args():
     parser.add_argument('--num_workers', type=int, default=8, help='dataloader num_workers')
     parser.add_argument('--save_interval', type=int, default=5, help='model save interval')
     parser.add_argument('--save_max_num', type=int, default=10, help='the max number of model save files')
-    parser.add_argument('--train_eval', type=bool, default=False, help='boolean about evaluation on train dataset')
     parser.add_argument('--eval_interval', type=int, default=1, help='evaluation metric log interval')
     # training parameter
     parser.add_argument('--image_size', type=int, default=1024)
@@ -70,7 +65,7 @@ def parse_args():
 
 def do_training(
     data_dir, val_data_dir, work_dir, work_dir_exp,
-    device, seed, num_workers, save_interval, save_max_num, train_eval, eval_interval,
+    device, seed, num_workers, save_interval, save_max_num, eval_interval,
     image_size, input_size, batch_size, learning_rate, max_epoch, optm, schd,
     sweep
     ):
@@ -83,8 +78,8 @@ def do_training(
     train_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
     
     # valid CV dataset
-    val_dataset = SceneTextDataset(val_data_dir, split='valid', image_size=image_size, crop_size=input_size)
-    val_dataset = EASTDataset(val_dataset)
+    val_dataset = [SceneTextDataset(i, split='valid', image_size=image_size, crop_size=input_size) for ind, i in enumerate(val_data_dir)]
+    val_dataset = EASTDataset(ConcatDataset(val_dataset))
     val_num_batches = math.ceil(len(val_dataset) / batch_size)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
 
@@ -112,17 +107,23 @@ def do_training(
         scheduler = lr_scheduler.ReduceLROnPlateau(optimizer)
     elif schd == 'cosignlr':
         scheduler = CosineAnnealingWarmUpRestarts(
-            optimizer, T_0=50, T_mult=1, eta_max=learning_rate, T_up=5, gamma=0.5)
+            optimizer, T_0=max_epoch, T_mult=1, eta_max=learning_rate, T_up=max_epoch//10, gamma=0.5)
     
     for epoch in range(max_epoch):
         # train
         model.train()
         epoch_loss, epoch_cls_loss, epoch_ang_loss, epoch_iou_loss = 0, 0, 0, 0
         with tqdm(total=num_batches) as pbar:
-            for img, gt_score_map, gt_geo_map, roi_mask in train_loader:
+            for idx, (img, gt_score_map, gt_geo_map, roi_mask) in enumerate(train_loader):
                 pbar.set_description('[Epoch {} Train]'.format(epoch + 1))
 
                 loss, extra_info = model.train_step(img, gt_score_map, gt_geo_map, roi_mask)
+                if idx == 0:
+                    batch_train_d = []
+                    for train_img in img:
+                        train_img = train_img.permute(1,2,0).cpu().numpy()
+                        batch_train_d.append(wandb.Image(train_img))
+                    wandb.log({'Train Data':batch_train_d}, commit=False)
 
                 optimizer.zero_grad()
                 loss.backward()
@@ -145,7 +146,7 @@ def do_training(
         model.eval()
         val_epoch_loss, val_epoch_cls_loss, val_epoch_ang_loss, val_epoch_iou_loss = 0, 0, 0, 0
         with tqdm(total=val_num_batches) as pbar:
-            for img, gt_score_map, gt_geo_map, roi_mask in val_loader:
+            for idx, (img, gt_score_map, gt_geo_map, roi_mask) in enumerate(val_loader):
                 pbar.set_description('[Epoch {} Valid]'.format(epoch + 1))
 
                 with torch.no_grad():
@@ -158,24 +159,14 @@ def do_training(
                 val_epoch_iou_loss += extra_info['iou_loss']
 
                 pred_score_maps, pred_geo_maps = extra_info['score_map'], extra_info['geo_map']
-                batch_bbox_result = []
-                batch_map_result = []
-                for image, pred_score_map, pred_geo_map in zip(img, pred_score_maps, pred_geo_maps):
-                    map_rst, bbox_rst = detect_valid(image, pred_score_map, pred_geo_map)
-                    batch_map_result.append(wandb.Image(map_rst))
-                    batch_bbox_result.append(wandb.Image(bbox_rst))
-                wandb.log({'bbox_result':batch_bbox_result, 'map_result':batch_map_result}, commit=False)
-                    
-
-                # d_img = img.permute(0,2,3,1).detach().cpu().numpy()
-                # bboxes_rst, maps_rst = detect_valid(model, d_img, input_size)
-                # batch_bbox_result = []
-                # batch_map_result = []
-                # for bboxes, maps in zip(bboxes_rst, maps_rst):
-                #     batch_bbox_result.append(wandb.Image(bboxes))
-                #     batch_map_result.append(wandb.Image(maps))
-                # wandb.log({'bbox_result':batch_bbox_result, 'map_result':batch_map_result})
-
+                if idx == 0:
+                    batch_bbox_result = []
+                    batch_map_result = []
+                    for image, pred_score_map, pred_geo_map in zip(img, pred_score_maps, pred_geo_maps):
+                        map_rst, bbox_rst = detect_valid(image, pred_score_map, pred_geo_map)
+                        batch_map_result.append(wandb.Image(map_rst))
+                        batch_bbox_result.append(wandb.Image(bbox_rst))
+                    wandb.log({'bbox_result':batch_bbox_result, 'map_result':batch_map_result}, commit=False)
 
                 pbar.update(1)
             # set_postfix is about one epoch
@@ -184,18 +175,23 @@ def do_training(
                 'ang_loss': val_epoch_ang_loss/val_num_batches, 'iou_loss': val_epoch_iou_loss/val_num_batches,
             })
 
-        # valid evaluation
+        # evaluation
         if (epoch + 1) % eval_interval == 0:
-            gt_ufo = read_json(osp.join(val_data_dir, 'ufo/valid.json'))
-            # ckpt_fpath : we don't use in here
-            # split : valid image_folder_name
-            pred_ufo = do_inference(model=model, input_size=input_size, batch_size=batch_size,
-                                    data_dir=val_data_dir, ckpt_fpath=None, split='images')
-            val_epoch_precison, val_epoch_recall, val_epoch_hmean = do_evaluating(gt_ufo, pred_ufo)
+            all_precision, all_recall, all_hmean = 0, 0, 0
+            for i in val_data_dir:
+                gt_ufo = read_json(osp.join(i, 'ufo/valid.json'))
+                # ckpt_fpath : we don't use in here
+                # split : valid image_folder_name
+                pred_ufo = do_inference(model=model, input_size=input_size, batch_size=batch_size,
+                                        data_dir=i, ckpt_fpath=None, split='images')
+                precision, recall, hmean = do_evaluating(gt_ufo, pred_ufo)
+                all_precision += precision
+                all_recall += recall
+                all_hmean += hmean
             wandb.log({
-                "valid_metric/precision": val_epoch_precison,
-                "valid_metric/recall": val_epoch_recall,
-                "valid_metric/hmean": val_epoch_hmean,
+                "valid_metric/precision": all_precision/len(val_data_dir),
+                "valid_metric/recall": all_recall/len(val_data_dir),
+                "valid_metric/hmean": all_hmean/len(val_data_dir),
             }, commit=False)
 
         # ReduceLROnPlateau scheduler consider valid loss when doing step
@@ -260,11 +256,7 @@ def main(args):
         wandb_run.name = args.work_dir_exp.split('/')[-1]  # run name
         
         args = update_args(args, wandb.config)
-        
-        # save args as yaml file every experiment
-        yamldir = osp.join(os.getcwd(), args.work_dir_exp+'/train_config.yml')
-        with open(yamldir, 'w') as f: yaml.dump(args.__dict__, f, indent=4)
-        
+
         do_training(**args.__dict__)
         wandb_run.finish()
     else:
@@ -276,12 +268,11 @@ def main(args):
             name=args.work_dir_exp.split('/')[-1],
             config=args.__dict__, reinit=True
         )
-        
-        # save args as yaml file every experiment
-        yamldir = osp.join(os.getcwd(), args.work_dir_exp+'/train_config.yml')
-        with open(yamldir, 'w') as f: yaml.dump(args.__dict__, f, indent=4)
-
         do_training(**args.__dict__)
+    
+    # save args as yaml file every experiment
+    yamldir = osp.join(os.getcwd(), args.work_dir_exp+'/train_config.yml')
+    with open(yamldir, 'w') as f: yaml.dump(args.__dict__, f, indent=4)
 
 
 if __name__ == '__main__':
