@@ -12,6 +12,7 @@ from torch.utils.data import DataLoader, ConcatDataset, Dataset
 
 from utils import delete_image, update_json
 
+
 NUM_WORKERS = 32  # FIXME
 
 IMAGE_EXTENSIONS = {'.gif', '.jpg', '.png'}
@@ -116,19 +117,12 @@ class MLTDataset(Dataset):
         return words_info, dict(languages=languages)
 
 
-
 def main(args):
     dst_image_dir = osp.join(args.DST_DATASET_DIR, 'images')
-    # dst_image_dir = None
 
     mlt_train = MLTDataset(osp.join(args.SRC_DATASET_DIR, 'images'),
-                             osp.join(args.SRC_DATASET_DIR, 'gt'),
-                             version = args.version )
-                            #  copy_images_to=dst_image_dir)
-    # mlt_train_2 = MLTDataset(osp.join(args.SRC_DATASET_DIR, 'images'),
-    #                          osp.join(args.SRC_DATASET_DIR, 'gt'),)
-    #                         #  copy_images_to=dst_image_dir)
-    # mlt_train = ConcatDataset([mlt_train, mlt_train_2])
+                           osp.join(args.SRC_DATASET_DIR, 'gt'),
+                           version = args.version)
 
     anno = dict(images=dict())
     with tqdm(total=len(mlt_train)) as pbar:
@@ -140,28 +134,16 @@ def main(args):
     ufo_dir = osp.join(args.DST_DATASET_DIR, 'ufo')
 
     maybe_mkdir(ufo_dir)
-    with open(osp.join(ufo_dir, ufo_name), 'w') as f:
+    with open(osp.join(ufo_dir, args.ufo_name+'.json'), 'w') as f:
         json.dump(anno, f, indent=4)
     
-    delete_image(json_dir=osp.join(ufo_dir, ufo_name),
-                 image_dir=osp.join(DST_DATASET_DIR, 'images'),
-                 extension_list=['png','gif'])
-    update_json(json_dir=osp.join(ufo_dir, ufo_name),
-                extension_list=['png','gif'])
+    if args.version == '17':
+        delete_image(json_dir=osp.join(ufo_dir, args.ufo_name+'.json'),
+                     image_dir=dst_image_dir,
+                     extension_list=['png','gif'])
+        update_json(json_dir=osp.join(ufo_dir, args.ufo_name+'.json'),
+                    extension_list=['png','gif'])
 
-
-SRC_DATASET_DIR = '/opt/ml/input/data/ICDAR17_MLT'  # FIXME
-DST_DATASET_DIR = '/opt/ml/input/data/ICDAR17_ALL_valid'  # FIXME
-
-NUM_WORKERS = 32  # FIXME
-
-IMAGE_EXTENSIONS = {'.gif', '.jpg', '.png'}
-
-LANGUAGE_MAP = {
-    'Korean': 'ko',
-    'Latin': 'en',
-    'Symbols': None
-}
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -171,5 +153,7 @@ if __name__ == '__main__':
                         help='source json directory')
     parser.add_argument('--version', '-v', type=str, default="19",
                         help='ICDAR version')
+    parser.add_argument('--ufo_name', '-n', type=str, default="train",
+                        help='ufo foramt json name')
     args = parser.parse_args()
     main(args=args)
