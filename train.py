@@ -26,11 +26,14 @@ from deteval import calc_deteval_metrics
 from sweep import update_args, get_sweep_cfg
 from utils import increment_path, set_seeds, read_json
 from custom_scheduler import CosineAnnealingWarmUpRestarts
+from utils_vis import detect_valid
+
+import matplotlib.pyplot as plt
+from utils_vis import draw_bboxes, find_bbox_from_maps
 
 def parse_args():
     parser = ArgumentParser()
     # directory
-
     parser.add_argument('--data_dir', type=str, nargs='+', default=['/opt/ml/input/data/ICDAR17_Korean'],
                         help='the dir that have images and ufo/train.json in sub_directories')
     parser.add_argument('--val_data_dir', type=str, nargs='+', default=['/opt/ml/input/data/AIHUB_outside_sample','/opt/ml/input/data/ICDAR17_Korean'],
@@ -111,10 +114,16 @@ def do_training(
         model.train()
         epoch_loss, epoch_cls_loss, epoch_ang_loss, epoch_iou_loss = 0, 0, 0, 0
         with tqdm(total=num_batches) as pbar:
-            for img, gt_score_map, gt_geo_map, roi_mask in train_loader:
+            for idx, (img, gt_score_map, gt_geo_map, roi_mask) in enumerate(train_loader):
                 pbar.set_description('[Epoch {} Train]'.format(epoch + 1))
 
                 loss, extra_info = model.train_step(img, gt_score_map, gt_geo_map, roi_mask)
+                if idx == 0:
+                    batch_train_d = []
+                    for train_img in img:
+                        train_img = train_img.permute(1,2,0).cpu().numpy()
+                        batch_train_d.append(wandb.Image(train_img))
+                    wandb.log({'train_image':batch_train_d}, commit=False)
 
                 optimizer.zero_grad()
                 loss.backward()
@@ -137,7 +146,7 @@ def do_training(
         model.eval()
         val_epoch_loss, val_epoch_cls_loss, val_epoch_ang_loss, val_epoch_iou_loss = 0, 0, 0, 0
         with tqdm(total=val_num_batches) as pbar:
-            for img, gt_score_map, gt_geo_map, roi_mask in val_loader:
+            for idx, (img, gt_score_map, gt_geo_map, roi_mask) in enumerate(val_loader):
                 pbar.set_description('[Epoch {} Valid]'.format(epoch + 1))
 
                 with torch.no_grad():
@@ -148,6 +157,16 @@ def do_training(
                 val_epoch_cls_loss += extra_info['cls_loss']
                 val_epoch_ang_loss += extra_info['angle_loss']
                 val_epoch_iou_loss += extra_info['iou_loss']
+
+                pred_score_maps, pred_geo_maps = extra_info['score_map'], extra_info['geo_map']
+                if idx == 0:
+                    batch_bbox_result = []
+                    batch_map_result = []
+                    for image, pred_score_map, pred_geo_map in zip(img, pred_score_maps, pred_geo_maps):
+                        map_rst, bbox_rst = detect_valid(image, pred_score_map, pred_geo_map)
+                        batch_map_result.append(wandb.Image(map_rst))
+                        batch_bbox_result.append(wandb.Image(bbox_rst))
+                    wandb.log({'bbox_result':batch_bbox_result, 'map_result':batch_map_result}, commit=False)
 
                 pbar.update(1)
             # set_postfix is about one epoch
@@ -245,7 +264,7 @@ def main(args):
         # if you want to use tags, put tags=['something'] in wandb.init
         # if you want to use group, put group='something' in wandb.init
         wandb.init(
-            entity='mg_generation', project='data_annotation_dongwoo',
+            entity='mg_generation', project='data_annotation_seonah',
             name=args.work_dir_exp.split('/')[-1],
             config=args.__dict__, reinit=True
         )
@@ -261,7 +280,7 @@ if __name__ == '__main__':
     if args.sweep:
         sweep_cfg = get_sweep_cfg()
         # you must to change project name
-        sweep_id = wandb.sweep(sweep=sweep_cfg, entity='mg_generation', project='data_annotation_dongwoo')
+        sweep_id = wandb.sweep(sweep=sweep_cfg, entity='mg_generation', project='data_annotation_seonah')
         wandb.agent(sweep_id=sweep_id, function=partial(main, args))
     else:
         main(args)
