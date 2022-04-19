@@ -1,71 +1,78 @@
 import os
 import json
-
-file_data = dict()
-file_data["images"] = dict()
-
-# 이미지 경로
-# path에 ai hub 이미지 데이터 경로를 적어주세요.
-path = './korean_outside_images'
-file_list = os.listdir(path)
+import glob
+import argparse
 
 
-#저장할 사진의 json파일 열기
-for name in file_list:
-    temp = dict() # temp에 정보들을 넣어서 최종적으로 ufo로 바꿀 예정
+def main(args):
+    file_data = dict()
+    file_data["images"] = dict()
 
-    # 확장자가 jpg, JPG 2가지로 구성됨
-    j_name = name.replace('.JPG','.json')
-    j_name = j_name.replace('.jpg','.json')
+    # modify each image's json file 
+    for name in glob.glob(os.path.join(args.images_path,'*')):
+        temp = dict() 
 
-    # address : ai hub json 파일이 있는 경로
-    address = './korean_outside_json/' + j_name
-    with open(address,'r', encoding='UTF8') as f:
-        json_data = json.load(f)
-        
-        temp["img_h"] = json_data["images"][0]["height"]
-        temp["img_w"] = json_data["images"][0]["width"]
-        temp["words"] = dict()
-        
-        i = 0
-        for ann in json_data["annotations"]:
-            if(len(ann["bbox"])!=4):
-                continue
+        tmp = name.split('.')
+        tmp[-1] = 'json'
+        json_name = ".".join(tmp).replace('images','gt')
+
+        with open(json_name,'r', encoding='UTF8') as f:
+            json_data = json.load(f)
             
-            x,y,w,h = ann["bbox"]
-            if ann["bbox"][0] is None:
-                continue 
+            temp["img_h"] = json_data["images"][0]["height"]
+            temp["img_w"] = json_data["images"][0]["width"]
+            temp["words"] = dict()
+            
+            i = 0
+            for ann in json_data["annotations"]:
+                if(len(ann["bbox"])!=4):
+                    continue
                 
-            temp["words"][i] = {
-                "transcription":ann["text"],
-                "language": ["ko"]}
+                x,y,w,h = ann["bbox"]
+                if ann["bbox"][0] is None:
+                    continue 
+                    
+                temp["words"][i] = {
+                    "transcription":ann["text"],
+                    "language": ["ko"]}
+                
+                if ann["text"] == "xxx":
+                    temp["words"][i]["illegibility"]=True
+                else:
+                    temp["words"][i]["illegibility"]=False
             
-            if ann["text"] == "xxx":
-                temp["words"][i]["illegibility"]=True
-            else:
-                temp["words"][i]["illegibility"]=False
-           
 
-            if json_data["metadata"][0]["wordorientation"] == "가로":
-                temp["words"][i]["orientation"] = "Horizontal"
-            elif json_data["metadata"][0]["wordorientation"] == "세로":
-                temp["words"][i]["orientation"] = "Vertical"
-            else:
-                temp["words"][i]["orientation"] = "Irregular"
+                if json_data["metadata"][0]["wordorientation"] == "가로":
+                    temp["words"][i]["orientation"] = "Horizontal"
+                elif json_data["metadata"][0]["wordorientation"] == "세로":
+                    temp["words"][i]["orientation"] = "Vertical"
+                else:
+                    temp["words"][i]["orientation"] = "Irregular"
 
-            point = [[x,y],
-                     [x+w,y],
-                     [x+w,y+h],
-                     [x,y+h]]
-            temp["words"][i]["points"] = point
-            temp["words"][i]["word_tags"]=None
-            i+=1
-         
-    file_data["images"][name] = temp
+                point = [[x,y],
+                        [x+w,y],
+                        [x+w,y+h],
+                        [x,y+h]]
+                temp["words"][i]["points"] = point
+                temp["words"][i]["word_tags"]=None
+                i+=1
+            
+        file_data["images"][name] = temp
+
+    # save converted ufo format
+    with open(args.out_path, 'w') as f:  
+        json.dump(file_data, f, indent=4)
 
 
-# ufo json 저장할 경로
-file_path = 'new_ufo.json'
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--images_path', '-i', type=str, default="/opt/ml/input/data/AIHUB_outside_bookcover/images",
+                        help='input images path')
+    parser.add_argument('--out_path', '-o', type=str, default="/opt/ml/input/data/AIHUB_outside_bookcover/ufo/train.json",
+                        help='out_json_path')
+    parser.add_argument('--json_path', '-j', type=str, default= '/opt/ml/input/data/AIHUB_outside_bookcover/gt',
+                        help='input jsons path')
+    args = parser.parse_args()
 
-with open(file_path, 'w') as f:   # annotation 내용을 원하는 디렉토리에 저장
-    json.dump(file_data, f, indent=4)
+    main(args)
+

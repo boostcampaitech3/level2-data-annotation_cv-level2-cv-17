@@ -27,13 +27,12 @@ from sweep import update_args, get_sweep_cfg
 from utils import increment_path, set_seeds, read_json
 from custom_scheduler import CosineAnnealingWarmUpRestarts
 
-
 def parse_args():
     parser = ArgumentParser()
     # directory
-    parser.add_argument('--data_dir', type=str, nargs='+', default=['/opt/ml/input/data/AIHUB', '/opt/ml/input/data/ICDAR17_train_cv'])
+    parser.add_argument('--data_dir', type=str, nargs='+', default=['/opt/ml/input/data/ICDAR19'])
     parser.add_argument('--val_data_dir', type=str,
-                        default=os.environ.get('SM_CHANNEL_TRAIN', '/opt/ml/input/data/ICDAR17_valid_cv'))
+                        default=os.environ.get('SM_CHANNEL_TRAIN', '/opt/ml/input/data/ICDAR17_Korean'))
 
     parser.add_argument('--work_dir', type=str, default='./work_dirs',
                         help='the root dir to save logs and models about each experiment')
@@ -245,7 +244,7 @@ def main(args):
         # if you want to use tags, put tags=['something'] in wandb.init
         # if you want to use group, put group='something' in wandb.init
         wandb.init(
-            entity='mg_generation', project='data_annotation_baekkr',
+            entity='mg_generation', project='data_annotation_hyo',
             name=args.work_dir_exp.split('/')[-1],
             config=args.__dict__, reinit=True
         )
@@ -262,7 +261,7 @@ if __name__ == '__main__':
     if args.sweep:
         sweep_cfg = get_sweep_cfg()
         # you must to change project name
-        sweep_id = wandb.sweep(sweep=sweep_cfg, entity='mg_generation', project='data_annotation_baekkr')
+        sweep_id = wandb.sweep(sweep=sweep_cfg, entity='mg_generation', project='data_annotation_hyo')
         wandb.agent(sweep_id=sweep_id, function=partial(main, args))
     else:
         main(args)
