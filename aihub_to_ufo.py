@@ -24,7 +24,7 @@ for name in file_list:
 
     # you must check this
     # gt_path : ai hub json 파일이 있는 경로
-    gt_path = osp.join('/opt/ml/input/data/AIHUB_outside_sample/jsons', j_name)
+    gt_path = osp.join('/opt/ml/input/data/AIHUB_outside_sample/gts', j_name)
     with open(gt_path, 'r', encoding='UTF8') as f:
         json_data = json.load(f)
         
