@@ -3,5 +3,4 @@ utils.ipynb
 __pycache__/
 wandb/
 work_dirs/
-convert_mlt.py
 sweep.py
