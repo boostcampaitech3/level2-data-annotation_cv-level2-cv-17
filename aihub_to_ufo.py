@@ -1,14 +1,18 @@
 import os
+import os.path as osp
 import json
 
 file_data = dict()
 file_data["images"] = dict()
 
-# 이미지 경로
-# path에 ai hub 이미지 데이터 경로를 적어주세요.
-path = './korean_outside_images'
-file_list = os.listdir(path)
+# you must check this
+# image_path에 ai hub 이미지 데이터 경로를 적어주세요.
+image_path = '/opt/ml/input/data/AIHUB_outside_sample/images'
+file_list = os.listdir(image_path)
 
+# you must check this
+# ufo json 저장할 경로 train.json or valid.json
+save_ufo_path = '/opt/ml/input/data/AIHUB_outside_sample/ufo/valid.json'
 
 #저장할 사진의 json파일 열기
 for name in file_list:
@@ -18,9 +22,10 @@ for name in file_list:
     j_name = name.replace('.JPG','.json')
     j_name = j_name.replace('.jpg','.json')
 
-    # address : ai hub json 파일이 있는 경로
-    address = './korean_outside_json/' + j_name
-    with open(address,'r', encoding='UTF8') as f:
+    # you must check this
+    # gt_path : ai hub json 파일이 있는 경로
+    gt_path = osp.join('/opt/ml/input/data/AIHUB_outside_sample/gts', j_name)
+    with open(gt_path, 'r', encoding='UTF8') as f:
         json_data = json.load(f)
         
         temp["img_h"] = json_data["images"][0]["height"]
@@ -64,8 +69,5 @@ for name in file_list:
     file_data["images"][name] = temp
 
 
-# ufo json 저장할 경로
-file_path = 'new_ufo.json'
-
-with open(file_path, 'w') as f:   # annotation 내용을 원하는 디렉토리에 저장
+with open(ufo_path, 'w') as f:   # annotation 내용을 원하는 디렉토리에 저장
     json.dump(file_data, f, indent=4)
