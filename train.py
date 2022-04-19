@@ -123,7 +123,7 @@ def do_training(
                     for train_img in img:
                         train_img = train_img.permute(1,2,0).cpu().numpy()
                         batch_train_d.append(wandb.Image(train_img))
-                    wandb.log({'Train Data':batch_train_d}, commit=False)
+                    wandb.log({'train_image':batch_train_d}, commit=False)
 
                 optimizer.zero_grad()
                 loss.backward()
