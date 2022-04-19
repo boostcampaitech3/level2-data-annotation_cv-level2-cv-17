@@ -10,6 +10,7 @@ from tqdm import tqdm
 
 from torch.utils.data import DataLoader, ConcatDataset, Dataset
 
+from utils import delete_image, update_json
 
 NUM_WORKERS = 32  # FIXME
 
@@ -20,6 +21,7 @@ LANGUAGE_MAP = {
     'Latin': 'en',
     'Symbols': None
 }
+
 
 def get_language_token(x):
     return LANGUAGE_MAP.get(x, 'others')
@@ -49,8 +51,9 @@ class MLTDataset(Dataset):
             assert label_path in label_paths
 
             words_info, extra_info = self.parse_label_file(label_path)
-            
+
             # option -> if you want using the other languages, comment out below 2 lines
+
             # if 'ko' not in extra_info['languages'] or extra_info['languages'].difference({'ko', 'en'}):
             #     continue
 
@@ -113,6 +116,7 @@ class MLTDataset(Dataset):
         return words_info, dict(languages=languages)
 
 
+
 def main(args):
     dst_image_dir = osp.join(args.DST_DATASET_DIR, 'images')
     # dst_image_dir = None
@@ -134,10 +138,30 @@ def main(args):
             pbar.update(1)
 
     ufo_dir = osp.join(args.DST_DATASET_DIR, 'ufo')
-    maybe_mkdir(ufo_dir)
-    with open(osp.join(ufo_dir, 'train.json'), 'w') as f:
-        json.dump(anno, f, indent=4)
 
+    maybe_mkdir(ufo_dir)
+    with open(osp.join(ufo_dir, ufo_name), 'w') as f:
+        json.dump(anno, f, indent=4)
+    
+    delete_image(json_dir=osp.join(ufo_dir, ufo_name),
+                 image_dir=osp.join(DST_DATASET_DIR, 'images'),
+                 extension_list=['png','gif'])
+    update_json(json_dir=osp.join(ufo_dir, ufo_name),
+                extension_list=['png','gif'])
+
+
+SRC_DATASET_DIR = '/opt/ml/input/data/ICDAR17_MLT'  # FIXME
+DST_DATASET_DIR = '/opt/ml/input/data/ICDAR17_ALL_valid'  # FIXME
+
+NUM_WORKERS = 32  # FIXME
+
+IMAGE_EXTENSIONS = {'.gif', '.jpg', '.png'}
+
+LANGUAGE_MAP = {
+    'Korean': 'ko',
+    'Latin': 'en',
+    'Symbols': None
+}
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
