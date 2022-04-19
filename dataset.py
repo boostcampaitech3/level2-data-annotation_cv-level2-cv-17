@@ -10,6 +10,8 @@ import albumentations as A
 from torch.utils.data import Dataset
 from shapely.geometry import Polygon
 
+from augmentation import ComposedTransformation
+
 
 def cal_distance(x1, y1, x2, y2):
     '''calculate the Euclidean distance'''
@@ -338,13 +340,32 @@ class SceneTextDataset(Dataset):
                  normalize=True):
         with open(osp.join(root_dir, 'ufo/{}.json'.format(split)), 'r') as f:
             anno = json.load(f)
-        self.split = split
+
         self.anno = anno
         self.image_fnames = sorted(anno['images'].keys())
         self.image_dir = osp.join(root_dir, 'images')
 
         self.image_size, self.crop_size = image_size, crop_size
         self.color_jitter, self.normalize = color_jitter, normalize
+
+        self.split = split
+
+        ## ComposedTransformation init
+        self.train_transforms = ComposedTransformation(
+            rotate_range=30, crop_aspect_ratio=1.0, crop_size=0.3, hflip=True, vflip=True,
+            random_translate=True, min_image_overlap=0.9, min_bbox_overlap=0.99, min_bbox_count=1,
+            allow_partial_occurrence=True,
+            resize_to=512,
+            max_random_trials=50,
+            brightness=0.5, contrast=0.5, saturation=0.5, hue=0.25,
+            normalize=True, mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5), to_tensor=False
+        )
+
+        self.valid_transforms = ComposedTransformation(
+            resize_to=512,
+            normalize=True, mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5), to_tensor=False
+        )
+
 
     def __len__(self):
         return len(self.image_fnames)
@@ -362,28 +383,30 @@ class SceneTextDataset(Dataset):
         vertices, labels = filter_vertices(vertices, labels, ignore_under=10, drop_under=1)
 
         image = Image.open(image_fpath)
-        image = ImageOps.exif_transpose(image)
-        
-        image, vertices = resize_img(image, vertices, self.image_size)
-        if self.split == 'train':
-            image, vertices = adjust_height(image, vertices)
-            image, vertices = rotate_img(image, vertices)
-        image, vertices = crop_img(image, vertices, labels, self.crop_size)
+        # 사진이 rotate되는 현상 방지 
+        image = ImageOps.exif_transpose(image)  
 
+            
         if image.mode != 'RGB':
             image = image.convert('RGB')
         image = np.array(image)
 
-        funcs = []
-        if self.split == 'train':
-            if self.color_jitter:
-                funcs.append(A.ColorJitter(0.5, 0.5, 0.5, 0.25))
-        if self.normalize:
-            funcs.append(A.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)))
-        transform = A.Compose(funcs)
-
-        image = transform(image=image)['image']
         word_bboxes = np.reshape(vertices, (-1, 4, 2))
-        roi_mask = generate_roi_mask(image, vertices, labels)
+
+        if self.split == 'train':
+            ## ComposedTransformation 적용    
+            composed_transform = self.train_transforms(image=image, word_bboxes=word_bboxes)
+            image = composed_transform['image']
+            word_bboxes = composed_transform['word_bboxes']
+
+            roi_mask = generate_roi_mask(image, vertices, labels) 
+
+        else:
+            composed_transform = self.valid_transforms(image=image, word_bboxes=word_bboxes)
+            image = composed_transform['image']
+            word_bboxes = composed_transform['word_bboxes']
+
+            roi_mask = generate_roi_mask(image, vertices, labels) 
+
 
         return image, word_bboxes, roi_mask
