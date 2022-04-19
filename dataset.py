@@ -372,9 +372,8 @@ class SceneTextDataset(Dataset):
         image = np.array(image)
 
         funcs = []
-        if self.split == 'train':
-            if self.color_jitter:
-                funcs.append(A.ColorJitter(0.5, 0.5, 0.5, 0.25))
+        if self.color_jitter:
+            funcs.append(A.ColorJitter(0.5, 0.5, 0.5, 0.25))
         if self.normalize:
             funcs.append(A.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)))
 

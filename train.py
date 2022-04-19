@@ -38,6 +38,9 @@ def parse_args():
     parser.add_argument('--data_dir', type=str, nargs='+', default=['/opt/ml/input/data/ICDAR17_Korean'])
     parser.add_argument('--val_data_dir', type=str,
                         default=os.environ.get('SM_CHANNEL_TRAIN', '/opt/ml/input/data/ICDAR17_Korean'))
+    # parser.add_argument('--data_dir', type=str, nargs='+', default=['/opt/ml/input/data/AIHUB', '/opt/ml/input/data/ICDAR17_train_cv'])
+    # parser.add_argument('--val_data_dir', type=str,
+    #                     default=os.environ.get('SM_CHANNEL_TRAIN', '/opt/ml/input/data/ICDAR17_valid_cv'))
 
     parser.add_argument('--work_dir', type=str, default='./work_dirs',
                         help='the root dir to save logs and models about each experiment')

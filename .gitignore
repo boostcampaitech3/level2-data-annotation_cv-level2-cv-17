@@ -3,4 +3,3 @@ utils.ipynb
 __pycache__/
 wandb/
 work_dirs/
-sweep.py

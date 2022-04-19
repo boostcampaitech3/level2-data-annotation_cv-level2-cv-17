@@ -70,16 +70,15 @@ def set_seeds(random_seed):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
-def delete_image(json_dir, image_dir, extension_list):
+def delete_image(json_dir, image_dir, extension):
     json_file = read_json(json_dir)
     
     # delete image with extension file
-    for extension in extension_list:
-        del_list = [i for i in json_file['images'].keys() if i.split('.')[-1]==extension]
-        for i in del_list:
-            os.remove(osp.join(image_dir, i))
+    del_list = [i for i in json_file['images'].keys() if i.split('.')[-1]==extension]
+    for i in del_list:
+        os.remove(osp.join(image_dir, i))
 
-def update_json(json_dir, extension_list):
+def update_json(json_dir, extension):
     json_file = read_json(json_dir)
     
     # train.json save to train_origin.json
@@ -90,10 +89,9 @@ def update_json(json_dir, extension_list):
             json.dump(json_file, f, indent=4)
 
     # pop extension file
-    for extension in extension_list:
-        update_list = [i for i in json_file['images'].keys() if i.split('.')[-1]==extension]
-        for i in update_list:
-            json_file['images'].pop(i)
+    update_list = [i for i in json_file['images'].keys() if i.split('.')[-1]==extension]
+    for i in update_list:
+        json_file['images'].pop(i)
     
     # update train.json without extension file
     with open(json_dir, 'w') as f:
