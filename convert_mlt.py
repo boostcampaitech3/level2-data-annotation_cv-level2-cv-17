@@ -2,26 +2,15 @@ import json
 import os
 import os.path as osp
 from glob import glob
-from PIL import Image
+from PIL import Image, ImageOps
 
 import numpy as np
 from tqdm import tqdm
 
 from torch.utils.data import DataLoader, ConcatDataset, Dataset
 
+from utils import delete_image, update_json
 
-SRC_DATASET_DIR = '/data/datasets/ICDAR17_MLT'  # FIXME
-DST_DATASET_DIR = '/data/datasets/ICDAR17_Korean'  # FIXME
-
-NUM_WORKERS = 32  # FIXME
-
-IMAGE_EXTENSIONS = {'.gif', '.jpg', '.png'}
-
-LANGUAGE_MAP = {
-    'Korean': 'ko',
-    'Latin': 'en',
-    'Symbols': None
-}
 
 def get_language_token(x):
     return LANGUAGE_MAP.get(x, 'others')
@@ -47,8 +36,10 @@ class MLT17Dataset(Dataset):
             assert label_path in label_paths
 
             words_info, extra_info = self.parse_label_file(label_path)
-            if 'ko' not in extra_info['languages'] or extra_info['languages'].difference({'ko', 'en'}):
-                continue
+            # you must check this
+            # if you save only 'ko'
+            # if 'ko' not in extra_info['languages'] or extra_info['languages'].difference({'ko', 'en'}):
+            #     continue
 
             sample_ids.append(sample_id)
             samples_info[sample_id] = dict(image_path=image_path, label_path=label_path,
@@ -66,6 +57,7 @@ class MLT17Dataset(Dataset):
 
         image_fname = osp.basename(sample_info['image_path'])
         image = Image.open(sample_info['image_path'])
+        image = ImageOps.exif_transpose(image)
         img_w, img_h = image.size
 
         if self.copy_images_to:
@@ -109,8 +101,8 @@ class MLT17Dataset(Dataset):
 
 
 def main():
+
     dst_image_dir = osp.join(DST_DATASET_DIR, 'images')
-    # dst_image_dir = None
 
     mlt_train = MLT17Dataset(osp.join(SRC_DATASET_DIR, 'raw/ch8_training_images'),
                              osp.join(SRC_DATASET_DIR, 'raw/ch8_training_gt'),
@@ -118,20 +110,41 @@ def main():
     mlt_valid = MLT17Dataset(osp.join(SRC_DATASET_DIR, 'raw/ch8_validation_images'),
                              osp.join(SRC_DATASET_DIR, 'raw/ch8_validation_gt'),
                              copy_images_to=dst_image_dir)
-    mlt_merged = ConcatDataset([mlt_train, mlt_valid])
+    
+    mlt_data = mlt_valid
+    ufo_name = 'valid.json'
 
     anno = dict(images=dict())
-    with tqdm(total=len(mlt_merged)) as pbar:
-        for batch in DataLoader(mlt_merged, num_workers=NUM_WORKERS, collate_fn=lambda x: x):
+    with tqdm(total=len(mlt_data)) as pbar:
+        for batch in DataLoader(mlt_data, num_workers=NUM_WORKERS, collate_fn=lambda x: x):
             image_fname, sample_info = batch[0]
             anno['images'][image_fname] = sample_info
             pbar.update(1)
-
+    
     ufo_dir = osp.join(DST_DATASET_DIR, 'ufo')
     maybe_mkdir(ufo_dir)
-    with open(osp.join(ufo_dir, 'train.json'), 'w') as f:
+    with open(osp.join(ufo_dir, ufo_name), 'w') as f:
         json.dump(anno, f, indent=4)
+    
+    delete_image(json_dir=osp.join(ufo_dir, ufo_name),
+                 image_dir=osp.join(DST_DATASET_DIR, 'images'),
+                 extension_list=['png','gif'])
+    update_json(json_dir=osp.join(ufo_dir, ufo_name),
+                extension_list=['png','gif'])
 
+
+SRC_DATASET_DIR = '/opt/ml/input/data/ICDAR17_MLT'  # FIXME
+DST_DATASET_DIR = '/opt/ml/input/data/ICDAR17_ALL_valid'  # FIXME
+
+NUM_WORKERS = 32  # FIXME
+
+IMAGE_EXTENSIONS = {'.gif', '.jpg', '.png'}
+
+LANGUAGE_MAP = {
+    'Korean': 'ko',
+    'Latin': 'en',
+    'Symbols': None
+}
 
 if __name__ == '__main__':
     main()
