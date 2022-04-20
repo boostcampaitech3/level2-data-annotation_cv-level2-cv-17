@@ -187,7 +187,7 @@ def is_cross_text(start_loc, length, vertices):
     return False
 
 
-def crop_img(img, vertices, labels, length):
+def crop_img(img, vertices, labels, length, count):
     '''crop img patches to obtain batch and augment
     Input:
         img         : PIL Image
@@ -218,7 +218,7 @@ def crop_img(img, vertices, labels, length):
     remain_w = img.width - length
     flag = True
     cnt = 0
-    while flag and cnt < 1000:
+    while flag and cnt < count:
         cnt += 1
         start_w = int(np.random.rand() * remain_w)
         start_h = int(np.random.rand() * remain_h)
@@ -367,7 +367,6 @@ class SceneTextDataset(Dataset):
             normalize=True, mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5), to_tensor=False
         )
 
-
     def __len__(self):
         return len(self.image_fnames)
 
@@ -386,43 +385,57 @@ class SceneTextDataset(Dataset):
         image = Image.open(image_fpath)
         image = ImageOps.exif_transpose(image)
 
-        if self.composed is True:  # use composed augmentation
-            if image.mode != 'RGB':
-                image = image.convert('RGB')
-            image = np.array(image)
-
-            word_bboxes = np.reshape(vertices, (-1, 4, 2))
-
-            if self.split == 'train':  # only training
-                composed_transform = self.train_transforms(image=image, word_bboxes=word_bboxes)
-            else:
-                composed_transform = self.valid_transforms(image=image, word_bboxes=word_bboxes)
-            
-            image = composed_transform['image']
-            word_bboxes = composed_transform['word_bboxes']
-        
-        else:  # use base augmentation
+        if self.split == 'train':
             image, vertices = resize_img(image, vertices, self.image_size)
-            if self.split == 'train':  # only training
-                image, vertices = adjust_height(image, vertices)
-                image, vertices = rotate_img(image, vertices)
-            image, vertices = crop_img(image, vertices, labels, self.crop_size)
+            image, vertices = adjust_height(image, vertices, ratio=0.3)
+            image, vertices = rotate_img(image, vertices, angle_range=10)
+            image, vertices = crop_img(image, vertices, labels, self.crop_size, count=1500)
 
-            if image.mode != 'RGB':
-                image = image.convert('RGB')
-            image = np.array(image)
+        if image.mode != 'RGB':
+            image = image.convert('RGB')
+        image = np.array(image)
 
+        if self.split == 'train':
             funcs = []
-            if self.split == 'train':  # only training
-                if self.color_jitter:
-                    funcs.append(A.ColorJitter(0.5, 0.5, 0.5, 0.25))
-            if self.normalize:
-                funcs.append(A.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)))
+            funcs.append(
+                A.OneOf([
+                    A.ColorJitter(brightness=0.5, contrast=0.5, saturation=0.5, hue=0.2, p=0.4),
+                    A.RandomBrightnessContrast(brightness_limit=0.5, contrast_limit=0.5, p=0.1)
+                ], p=0.5))
+            funcs.append(
+                A.OneOf([
+                    A.ChannelShuffle(p=0.3),
+                    A.RGBShift(r_shift_limit=20, g_shift_limit=20, b_shift_limit=20, p=0.2)
+                ], p=0.5))
+            funcs.append(
+                A.OneOf([
+                    A.InvertImg(),
+                    A.Equalize(),
+                    A.Solarize()
+                ], p=0.5))
+            funcs.append(
+                A.OneOf([
+                    A.Emboss(alpha=(0.2,0.5), strength=(0.2,0.7)),
+                    A.Sharpen(alpha=(0.2,0.5), lightness=(0.5,1.0))
+                ], p=0.5))
+            funcs.append(
+                A.OneOf([
+                    A.GaussianBlur(blur_limit=(3,3)),
+                    A.GaussNoise(var_limit=(10.0,50.0))
+                ], p=0.5))
+            funcs.append(
+                A.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)))
             transform = A.Compose(funcs)
 
             image = transform(image=image)['image']
-            word_bboxes = np.reshape(vertices, (-1, 4, 2))
         
+        word_bboxes = np.reshape(vertices, (-1, 4, 2))
+
+        if self.split == 'valid':
+            composed_transform = self.valid_transforms(image=image, word_bboxes=word_bboxes)
+            image = composed_transform['image']
+            word_bboxes = composed_transform['word_bboxes']
+
         roi_mask = generate_roi_mask(image, vertices, labels)
         
         return image, word_bboxes, roi_mask

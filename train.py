@@ -35,9 +35,9 @@ mpl.rcParams.update({'figure.max_open_warning': 0})
 def parse_args():
     parser = ArgumentParser()
     # directory
-    parser.add_argument('--data_dir', type=str, nargs='+', default=['/opt/ml/input/data/ICDAR19/all'],
+    parser.add_argument('--data_dir', type=str, nargs='+', default=['/opt/ml/input/data/ICDAR17/valid_notko'],
                         help='the dir that have images and ufo/train.json in sub_directories')
-    parser.add_argument('--val_data_dir', type=str, nargs='+', default=['/opt/ml/input/data/ICDAR17/train_ko','/opt/ml/input/data/ICDAR17/valid_ko','/opt/ml/input/data/ICDAR19/ko'],
+    parser.add_argument('--val_data_dir', type=str, nargs='+', default=['/opt/ml/input/data/ICDAR17/valid_ko'],
                         help='the dir that have images and ufo/valid.json in sub_directories')
     parser.add_argument('--work_dir', type=str, default='./work_dirs',
                         help='the root dir to save logs and models about each experiment')
@@ -46,8 +46,9 @@ def parse_args():
     parser.add_argument('--seed', type=int, default=42, help='random seed')
     parser.add_argument('--num_workers', type=int, default=8, help='dataloader num_workers')
     parser.add_argument('--save_interval', type=int, default=5, help='model save interval')
-    parser.add_argument('--save_max_num', type=int, default=10, help='the max number of model save files')
+    parser.add_argument('--save_max_num', type=int, default=20, help='the max number of model save files')
     parser.add_argument('--eval_interval', type=int, default=1, help='evaluation metric log interval')
+    parser.add_argument('--image_log_interval', type=int, default=5, help='train image log interval')
     # training parameter
     parser.add_argument('--image_size', type=int, default=1024)
     parser.add_argument('--input_size', type=int, default=512)
@@ -57,8 +58,7 @@ def parse_args():
     parser.add_argument('--optm', type=str, default='adam')
     parser.add_argument('--schd', type=str, default='multisteplr')
     # etc
-    parser.add_argument('--sweep', type=bool, default=False, help='sweep option')
-    parser.add_argument('--composed', type=bool, default=False, help='composed augmentation option')
+    parser.add_argument('--sweep', type=bool, default=True, help='sweep option')
 
     args = parser.parse_args()
     if args.input_size % 32 != 0: raise ValueError('`input_size` must be a multiple of 32')
@@ -67,20 +67,20 @@ def parse_args():
 
 def do_training(
     data_dir, val_data_dir, work_dir, work_dir_exp,
-    device, seed, num_workers, save_interval, save_max_num, eval_interval,
+    device, seed, num_workers, save_interval, save_max_num, eval_interval, image_log_interval,
     image_size, input_size, batch_size, learning_rate, max_epoch, optm, schd,
-    sweep, composed
+    sweep
     ):
     set_seeds(seed)
 
     # train CV dataset
-    dataset = [SceneTextDataset(i, split='train', image_size=image_size, crop_size=input_size, composed=composed) for ind, i in enumerate(data_dir)]
+    dataset = [SceneTextDataset(i, split='train', image_size=image_size, crop_size=input_size) for ind, i in enumerate(data_dir)]
     dataset = EASTDataset(ConcatDataset(dataset))
     num_batches = math.ceil(len(dataset) / batch_size)
     train_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
     
     # valid CV dataset
-    val_dataset = [SceneTextDataset(i, split='valid', image_size=image_size, crop_size=input_size, composed=composed) for ind, i in enumerate(val_data_dir)]
+    val_dataset = [SceneTextDataset(i, split='valid', image_size=image_size, crop_size=input_size) for ind, i in enumerate(val_data_dir)]
     val_dataset = EASTDataset(ConcatDataset(val_dataset))
     val_num_batches = math.ceil(len(val_dataset) / batch_size)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
@@ -120,12 +120,14 @@ def do_training(
                 pbar.set_description('[Epoch {} Train]'.format(epoch + 1))
 
                 loss, extra_info = model.train_step(img, gt_score_map, gt_geo_map, roi_mask)
-                if idx == 0:
-                    batch_train_d = []
-                    for train_img in img:
-                        train_img = train_img.permute(1,2,0).cpu().numpy()
-                        batch_train_d.append(wandb.Image(train_img))
-                    wandb.log({'train_image':batch_train_d}, commit=False)
+                
+                if (epoch + 1) % image_log_interval == 0:
+                    if idx == 0:
+                        batch_train_d = []
+                        for train_img in img:
+                            train_img = train_img.permute(1,2,0).cpu().numpy()
+                            batch_train_d.append(wandb.Image(train_img))
+                        wandb.log({'train_image':batch_train_d}, commit=False)
 
                 optimizer.zero_grad()
                 loss.backward()
@@ -161,14 +163,15 @@ def do_training(
                 val_epoch_iou_loss += extra_info['iou_loss']
 
                 pred_score_maps, pred_geo_maps = extra_info['score_map'], extra_info['geo_map']
-                if idx == 0:
-                    batch_bbox_result = []
-                    batch_map_result = []
-                    for image, pred_score_map, pred_geo_map in zip(img, pred_score_maps, pred_geo_maps):
-                        map_rst, bbox_rst = detect_valid(image, pred_score_map, pred_geo_map)
-                        batch_map_result.append(wandb.Image(map_rst))
-                        batch_bbox_result.append(wandb.Image(bbox_rst))
-                    wandb.log({'bbox_result':batch_bbox_result, 'map_result':batch_map_result}, commit=False)
+                if (epoch + 1) % image_log_interval == 0:
+                    if idx == 0:
+                        batch_bbox_result = []
+                        batch_map_result = []
+                        for image, pred_score_map, pred_geo_map in zip(img, pred_score_maps, pred_geo_maps):
+                            map_rst, bbox_rst = detect_valid(image, pred_score_map, pred_geo_map)
+                            batch_map_result.append(wandb.Image(map_rst))
+                            batch_bbox_result.append(wandb.Image(bbox_rst))
+                        wandb.log({'bbox_result':batch_bbox_result}, commit=False)
 
                 pbar.update(1)
             # set_postfix is about one epoch
